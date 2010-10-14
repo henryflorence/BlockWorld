@@ -1,0 +1,381 @@
+/* Include s3d symbols */
+#include <Script3d.h>
+#include <Camera.s3d.h>
+
+/* Set global scene parameters */
+SET SCENE_FOV  = 60;
+SET SCENE_NEAR = 0.5;
+SET SCENE_FAR  = 1000;
+
+
+// TODO: put your global variables here
+
+
+/* Camera globals */
+var CamPos = [0.0, 1.8, 30.0]; 	// camera position
+var shapes;
+var curShape = 0;
+var MAXBOUND = 50;
+var dP = 0.000001;
+
+/* Function declarations */
+function CameraMoveMouse();
+function getNewKeyboardEvents();
+function DrawGrid(col, size);
+
+class Shape 
+{
+	var faces;
+	var pos;
+	var bounds;
+	var corners;
+	
+	ResetShape();
+	SetShape(lt,rt,btm,top,fnt,bk);
+	DrawShape();
+	CalcBounds(scale);
+	CheckBounds();
+	CheckValues( bound, lt, olt, ort, bt, tp, obt, otp, ft, bk, oft, obk );
+	
+	GetLeft();
+	GetRight();
+	GetTop();
+	GetBottom();
+	GetFront();
+	GetBack();
+	
+	SetLeft(lt);
+	SetRight(rt);
+	SetBottom(bt);
+	setTop(tp);
+	SetFront(ft);
+	SetBack(bk);
+};
+function Shape::Shape()
+{
+	faces = {  /* Vertex indices for the 6 faces of a cube. */
+	  {0, 1, 2, 3}, {3, 2, 6, 7}, {7, 6, 5, 4},
+	  {4, 5, 1, 0}, {5, 6, 2, 1}, {7, 4, 0, 3} };
+	 
+	pos = [0,1,0];
+	bounds = [1,1,1];
+	corners = Array(8);
+	
+	for(var i = 0; i < 8; i++)
+		corners[i] = Vector(3);
+	
+	ResetShape();
+}
+function Shape::ResetShape()
+{
+	SetShape(-1,1,-1,1,-1,1);	
+	bounds = [1,1,1];
+}
+function Shape::SetShape(lt,rt,btm,top,fnt,bk) 
+{
+	//left face
+	corners[0].x = corners[1].x = corners[2].x = corners[3].x = lt;
+	
+	//right face
+	corners[4].x = corners[5].x = corners[6].x = corners[7].x = rt;
+	
+	//bottom
+	corners[0].y = corners[1].y = corners[4].y = corners[5].y = btm;
+	
+	//top
+	corners[2].y = corners[3].y = corners[6].y = corners[7].y = top;
+	
+	//back - left or right handedness??
+	corners[0].z = corners[3].z = corners[4].z = corners[7].z = fnt;
+	
+	//front
+	corners[1].z = corners[2].z = corners[5].z = corners[6].z = bk;
+}
+
+function Shape::DrawShape()
+{
+	glPushAttrib(GL_LIGHTING_BIT | GL_LINE_BIT | GL_CURRENT_BIT);
+	glDisable(GL_LIGHTING);
+	//glLoadIdentity();
+	
+	glPushMatrix();
+	glTranslate(pos);
+	glBegin(GL_QUADS);
+	for(var i = 0; i < 6; i++)
+	{
+		glVertex(corners[faces[i][0]]);
+		glVertex(corners[faces[i][1]]);
+		glVertex(corners[faces[i][2]]);
+		glVertex(corners[faces[i][3]]);
+	}
+	glEnd();
+	
+	glPopMatrix();
+	glPopAttrib();	
+}
+
+function Shape::CalcBounds(scale) {
+	bounds.x = bounds.x * scale.x;
+	bounds.y = bounds.y * scale.y;
+	bounds.z = bounds.z * scale.z; 
+	
+	bounds.x = bounds.x > MAXBOUND ? MAXBOUND : bounds.x;
+	bounds.y = bounds.y > MAXBOUND / 2 ? MAXBOUND / 2: bounds.y;
+	bounds.z = bounds.z > MAXBOUND ? MAXBOUND : bounds.z;
+	
+	SetShape(-bounds.x,bounds.x,-bounds.y,bounds.y,-bounds.z,bounds.z);
+}
+function Shape::CheckBounds() {
+
+	//ground plane
+	//if(GetBottom() < 0)  pos.y -= pos.y - bounds.y; 
+	
+	var leftBound = -MAXBOUND;
+	var bottomBound = 0;
+	var frontBound = -MAXBOUND;
+	
+	var rightBound = MAXBOUND;
+	var topBound = MAXBOUND;
+	var backBound = MAXBOUND;
+
+	// 'jiggle it a little' - removes some edge cases
+	pos.x += dP;
+	pos.y += dP;
+	pos.z += dP;
+	
+	foreach(var s in shapes) {
+		if(s.GetRight() > leftBound)
+			leftBound = CheckValues( leftBound, GetLeft(), s.GetLeft(), s.GetRight(), GetBottom(), GetTop(), 
+								s.GetBottom(), s.GetTop(), GetFront(), GetBack(), s.GetFront(), s.GetBack());
+		if(s.GetLeft() < rightBound)
+			rightBound = -CheckValues( -rightBound, -GetRight(), -s.GetRight(), -s.GetLeft(), GetBottom(), GetTop(), 
+								s.GetBottom(), s.GetTop(), GetFront(), GetBack(), s.GetFront(), s.GetBack());
+		if(s.GetTop() > bottomBound)
+			bottomBound = CheckValues( bottomBound, GetBottom(), s.GetBottom(), s.GetTop(), GetLeft(), GetRight(), 
+								s.GetLeft(), s.GetRight(), GetFront(), GetBack(), s.GetFront(), s.GetBack());
+		if(s.GetBottom() < topBound)
+			topBound = -CheckValues( -topBound, -GetTop(), -s.GetTop(), -s.GetBottom(), GetLeft(), GetRight(), 
+								s.GetLeft(), s.GetRight(), GetFront(), GetBack(), s.GetFront(), s.GetBack());
+		if(s.GetFront() > frontBound)
+			frontBound = CheckValues( frontBound, GetFront(), s.GetFront(), s.GetBack(), GetLeft(), GetRight(), 
+								s.GetLeft(), s.GetRight(), GetBottom(), GetTop(), s.GetBottom(), s.GetTop());
+		if(s.GetBack() < backBound)
+			backBound = -CheckValues( -backBound, -GetBack(), -s.GetBack(), -s.GetFront(), GetLeft(), GetRight(), 
+								s.GetLeft(), s.GetRight(), GetBottom(), GetTop(), s.GetBottom(), s.GetTop());						
+	}	
+	
+	// jiggle it back
+	pos.x -= dP;
+	pos.y -= dP;
+	pos.z -= dP;
+	
+	ConsoleText(0.05, 0.18, Sprintf("leftBound: %.2f %.2f",leftBound,GetLeft()));
+	ConsoleText(0.05, 0.21, Sprintf("rightBound: %.2f %.2f",rightBound,GetRight()));
+	ConsoleText(0.05, 0.24, Sprintf("topBound: %.2f %.2f",topBound,GetTop()));
+	ConsoleText(0.05, 0.27, Sprintf("bottomBound: %.2f %.2f",bottomBound,GetBottom()));
+	
+	/*if(GetLeft() < leftBound && GetRight() > rightBound) {
+		bounds.x = (rightBound - leftBound) / 2;
+		SetShape(-bounds.x,bounds.x,-bounds.y,bounds.y,-bounds.z,bounds.z);
+	} else */
+	
+	if(GetLeft() < leftBound) SetLeft(leftBound);
+	else if(GetRight() > rightBound) SetRight(rightBound);
+	
+	
+	if(GetBottom() < bottomBound) SetBottom(bottomBound);
+	else if(GetTop() > topBound) SetTop(topBound);
+	
+	if(GetFront() < frontBound) SetFront(frontBound);
+	else if(GetBack() > backBound) SetBack(backBound);
+}
+function Shape::CheckValues( bound, lt, olt, ort, bt, tp, obt, otp, ft, bk, oft, obk )
+{
+	if(	//check if the left face is inside other cube
+		olt < lt && ort > lt
+		//check if the cubes overlap in the vertical direction: 3 cases
+		//bottom of this between top and bottom of other
+		&& ((otp > bt + 0.15 && obt < bt)
+		//top of this between top and bottom of other
+		|| (otp > tp && obt < tp - 0.15)
+		//top and bottom of other inside this
+		|| (otp < tp && obt > bt))
+		//the same 3 cases for front and back
+		&& ((oft < ft && obk > ft) || (oft < bk && obk > bk) || (obk < bk && oft > ft))) 	
+			bound = ort;
+
+	return bound;
+}
+function Shape::SetLeft(lt) {
+	pos.x = lt + bounds.x;
+}
+function Shape::SetRight(rt) {
+	pos.x = rt - bounds.x;
+}
+function Shape::SetBottom(bt) {
+	pos.y = bt + bounds.y;
+}
+function Shape::SetTop(tp) {
+	pos.y = tp - bounds.y;
+}
+function Shape::SetFront(bt) {
+	pos.z = bt + bounds.y;
+}
+function Shape::SetBack(tp) {
+	pos.z = tp - bounds.y;
+}
+function Shape::GetLeft() {
+	return pos.x - bounds.x;
+}
+function Shape::GetRight() {
+	return pos.x + bounds.x;
+}
+function Shape::GetBottom() {
+	return pos.y - bounds.y;
+}
+function Shape::GetTop() {
+	return pos.y + bounds.y;
+}
+function Shape::GetFront() {
+	return pos.z - bounds.z;
+}
+function Shape::GetBack() {
+	return pos.z + bounds.z;
+}
+function OnDownload()
+{
+	// TODO: download your resources here
+	// E.g.: FileDownload("resource.ext");
+}
+
+
+
+function OnInit(params)
+{
+	/* initialize camera */
+	CameraGetCurrent().SetPosition(CamPos);
+	//var a = Array(1);
+	//a[0] = Shape2("henry");
+	//aadd(a,Shape2("Oliver"));
+	//a[1].y = 4;
+	//for(var i = 0; i < len(a); i++)
+	//	outputLN(sprintf("a[%i].name = "+a[i].name,i));//sprintf("a[0].name = %s",a[1].y));
+	
+	shapes = Array(1);
+	
+	shapes[0] = Shape();
+}
+
+
+function OnFrame()
+{
+	/* manage camera */
+	CameraMoveMouse();
+
+	SetClearColor(0,0,0);
+	SceneBegin();
+	
+	DrawGrid([0.5, 0.5, 0.5], 100);
+	
+	for (var i = 0; i < len(shapes); i++) {
+		if(curShape == i) glColor(.26,.71,.90);
+		shapes[i].DrawShape();
+		if(curShape == i) glColor(1,1,1);
+	}
+	
+	SceneEnd();
+}
+
+
+function DownloadReady(RequestID)
+{
+	// TODO
+}
+
+
+
+function OnTimer()
+{
+	getNewKeyboardEvents();
+}
+
+
+
+function OnExit()
+{
+	// TODO: put your cleanup code here
+}
+
+
+
+// Camera manager (using mouse)
+function CameraMoveMouse()
+{	
+
+	CameraMoveMouse_MBL_BS();
+
+}
+
+function getNewKeyboardEvents()
+{
+	var key = keyboard();
+	var inputScale = 1;
+	var scale = [1,1,1];
+	
+	if(key == "z") scale = [0.9,0.9,0.9];
+	else if(key == "x") scale = [1.1,1.1,1.1];
+	
+	if(key == "w") shapes[curShape].pos.y += 0.1;
+	else if(key == "s") shapes[curShape].pos.y -= 0.1;
+		
+	if(key == "d") shapes[curShape].pos.x += 0.1;
+	else if(key == "a") shapes[curShape].pos.x -= 0.1;
+	
+	if(key == "r") shapes[curShape].pos.z -= 0.1;
+	else if(key == "f") shapes[curShape].pos.z += 0.1;
+	
+	shapes[curShape].CalcBounds(scale);
+	shapes[curShape].CheckBounds(scale);
+
+	ConsoleText(0.05, 0.15, Sprintf("bounds: %.2f %.2f %.2f",shapes[curShape].bounds.x,shapes[curShape].bounds.y,shapes[curShape].bounds.z));
+	ConsoleText(0.05, 0.12, Sprintf("position: %.2f %.2f %.2f",shapes[curShape].pos.x,shapes[curShape].pos.y,shapes[curShape].pos.z));
+	ConsoleText(0.05, 0.09, Sprintf("bot, top: %.2f %.2f",shapes[curShape].corners[0].y,shapes[curShape].corners[2].y));
+	
+	if(key == "n")  {
+		aadd(shapes, Shape());
+		curShape = len(shapes) - 1;
+	}
+	if(key == "m")  {
+		curShape++;
+		curShape %= len(shapes);
+	}
+	if(key == "b")
+		shapes[curShape].ResetShape();
+}
+
+function DrawGrid(col, size)
+{
+	/* let's not mess up current OpenGL status */
+	glPushAttrib(GL_LIGHTING_BIT | GL_LINE_BIT | GL_CURRENT_BIT);
+	
+	glLineWidth(1);
+	glDisable(GL_LIGHTING);
+	glColor(col);
+	var max = size / 2.0;
+	var min = -max;	
+	var step = size / 10.0;
+	
+	glBegin(GL_LINES);
+		for (var i = min; i <= max; i += step)
+		{
+			glVertex(i, 0, max);
+			glVertex(i, 0, min);
+			
+			glVertex(max, 0, i);
+			glVertex(min, 0, i);
+		}
+	glEnd();
+	
+	/* polite restoration of previous OpenGL status */
+	glPopAttrib();
+}
