@@ -324,7 +324,7 @@ function joystickMove()
 		return;
 	}
 	
-	ConsoleText(0.1,0.9,Sprintf("j.x: %.2f, j.y: %.2f",j.x,j.y));
+	ConsoleText(0.1,0.9,Sprintf("j.x: %.2f, j.y: %.2f, j.z %.2f, j.r: %.2f, j.u: %.2f, j.v: %.2f",j.x,j.y,j.z,j.r,j.u,j.v));
 	
 	var CameraMatrix = CameraGetMatrix();
 	var CameraPos = CameraGetPosition();
@@ -357,7 +357,7 @@ function CameraMoveMouse()
 			var dX = Mouse.X - PrecX;
 			var d = 1 + (PrecY - Mouse.Y) * SCALE_SENSITIVITY;
 			
-			ConsoleText(0.05, 0.18, Sprintf("mouse scale: %.4f",d));
+			//ConsoleText(0.05, 0.18, Sprintf("mouse scale: %.4f",d));
 		 	shapes[curShape].bounds.x *= d;
 		 	shapes[curShape].bounds.y *= d;
 		 	shapes[curShape].bounds.z *= d;
@@ -376,7 +376,7 @@ function CameraMoveMouse()
 			
 			var dir = Norm(shapes[curShape].pos - camPos) ^ [0,1,0];
 			
-			ConsoleText(0.05, 0.18, Sprintf("dx: %.4f,dy: %.4f,dir: [%.2f,%.2f,%.2f]",dX,dY,dir.x,dir.y,dir.z));
+			//ConsoleText(0.05, 0.18, Sprintf("dx: %.4f,dy: %.4f,dir: [%.2f,%.2f,%.2f]",dX,dY,dir.x,dir.y,dir.z));
 		 	shapes[curShape].pos.y += dY;
 		 	shapes[curShape].pos.x += dX * dir.x;
 		 	shapes[curShape].pos.z += dX * dir.z;
@@ -465,9 +465,9 @@ function getNewKeyboardEvents()
 	shapes[curShape].CalcBounds(scale);
 	shapes[curShape].CheckBounds();
 	
-	ConsoleText(0.05, 0.15, Sprintf("bounds: %.2f %.2f %.2f",shapes[curShape].bounds.x,shapes[curShape].bounds.y,shapes[curShape].bounds.z));
-	ConsoleText(0.05, 0.12, Sprintf("position: %.2f %.2f %.2f",shapes[curShape].pos.x,shapes[curShape].pos.y,shapes[curShape].pos.z));
-	ConsoleText(0.05, 0.09, Sprintf("bot, top: %.2f %.2f",shapes[curShape].corners[0].y,shapes[curShape].corners[2].y));
+	//ConsoleText(0.05, 0.15, Sprintf("bounds: %.2f %.2f %.2f",shapes[curShape].bounds.x,shapes[curShape].bounds.y,shapes[curShape].bounds.z));
+	//ConsoleText(0.05, 0.12, Sprintf("position: %.2f %.2f %.2f",shapes[curShape].pos.x,shapes[curShape].pos.y,shapes[curShape].pos.z));
+	//ConsoleText(0.05, 0.09, Sprintf("bot, top: %.2f %.2f",shapes[curShape].corners[0].y,shapes[curShape].corners[2].y));
 	
 	if(key == "n")  {
 		aadd(shapes, Shape());
