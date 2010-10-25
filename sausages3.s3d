@@ -315,7 +315,7 @@ function CameraMoveMouse()
 	static var InMouseR = false, InMouseL = false, InMouseM = false;				
 	static var PrecX = 0, PrecY = 0;			
 	// Change these values to modify the mouse sensitivity
-	var TR_SENSITIVITY  = 0.0001 ;//* SceneScale;
+	var TR_SENSITIVITY  = 0.001 ;//* SceneScale;
 	var ROT_SENSITIVITY = 0.01;
 	var SCALE_SENSITIVITY = 0.01;
 	var TRANS_SENSITIVITY = 0.1;
