@@ -23,6 +23,7 @@ var scaling = false;
 function CameraMoveMouse();
 function getNewKeyboardEvents();
 function DrawGrid(col, size);
+function joystickMove();
 
 class Shape 
 {
@@ -256,6 +257,7 @@ function OnDownload()
 
 function OnInit(params)
 {
+	SceneSetParam(VR_HEADTRACKER,1);
 	/* initialize camera */
 	CameraGetCurrent().SetPosition(CamPos);
 	
@@ -272,7 +274,8 @@ function OnFrame()
 {
 	/* manage camera */
 	CameraMoveMouse();
-
+	joystickMove();
+	
 	SetClearColor(0,0,0);
 	SceneBegin();
 	
@@ -307,7 +310,34 @@ function OnExit()
 	// TODO: put your cleanup code here
 }
 
+function joystickMove()
+{
+	var TR_SENSITIVITY  = 0.5 ;
+	var ROT_SENSITIVITY = 2;
+	var DEADZONE  = 0.1;
 
+	var j = CVmJoystick();		
+	// Complain if no joystick is connected
+	if (!j.enabled)
+	{
+		ConsoleText(0.1,0.9,"To run the joystick demo, connect a joystick and restart.");
+		return;
+	}
+	
+	ConsoleText(0.1,0.9,Sprintf("j.x: %.2f, j.y: %.2f",j.x,j.y));
+	
+	var CameraMatrix = CameraGetMatrix();
+	var CameraPos = CameraGetPosition();
+	
+	//camera translation
+	var dX = (j.y - 0.5 < -DEADZONE || j.y - 0.5 > DEADZONE) ? j.y - 0.5 : 0;
+	CameraPos += CameraGetZAxis() * dX * TR_SENSITIVITY; // + CameraGetXAxis() * (j.y - 0.5) * TR_SENSITIVITY;
+	CameraSetPosition(CameraPos);
+	
+	//camera rotation
+	var dR = (j.x - 0.5 < -DEADZONE || j.x - 0.5 > DEADZONE) ? j.x - 0.5 : 0;
+	CameraRotate(dR*ROT_SENSITIVITY,0,1,0);
+}	
 
 // Camera manager (using mouse)
 function CameraMoveMouse()
