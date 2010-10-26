@@ -7,7 +7,8 @@ SET SCENE_FOV  = 60;
 SET SCENE_NEAR = 0.5;
 SET SCENE_FAR  = 1000;
 
-
+#define LOOK 1
+#define MOVE 2
 // TODO: put your global variables here
 
 
@@ -18,12 +19,17 @@ var curShape = 0;
 var MAXBOUND = 50;
 var dP = 0.000001;
 var scaling = false;
+var joyMode = LOOK;
+var lastButtons = 0;
+var pointer = [0.5,0.5,0];
 
 /* Function declarations */
 function CameraMoveMouse();
 function getNewKeyboardEvents();
 function DrawGrid(col, size);
 function joystickMove();
+function DrawCrossHairs();
+function PickShape();
 
 class Shape 
 {
@@ -286,11 +292,20 @@ function OnFrame()
 		shapes[i].DrawShape();
 		if(curShape == i) glColor(1,1,1);
 	}
-	
+	DrawCrossHairs();
+	PickShape();
 	SceneEnd();
 }
 
-
+function DrawCrossHairs() 
+{
+	ConsoleWidth( 1 );
+	ConsoleLines( [ pointer.x,pointer.y-0.03,pointer.x,pointer.y-0.01 ] );
+	ConsoleLines( [ pointer.x,pointer.y+0.01,pointer.x,pointer.y+0.03 ] );
+	ConsoleLines( [ pointer.x-0.025,pointer.y,pointer.x-0.01,pointer.y ] );
+	ConsoleLines( [ pointer.x+0.01,pointer.y,pointer.x+0.025,pointer.y ] );
+}
+function PickShape(){}
 function DownloadReady(RequestID)
 {
 	// TODO
@@ -324,19 +339,33 @@ function joystickMove()
 		return;
 	}
 	
-	ConsoleText(0.1,0.9,Sprintf("j.x: %.2f, j.y: %.2f",j.x,j.y));
+	ConsoleText(0.1,0.9,Sprintf("j.x: %.2f, j.y: %.2f, j.z %.2f, j.r: %.2f, j.u: %.2f, j.v: %.2f",j.x,j.y,j.z,j.r,j.u,j.v));
+	
+	pointer.x = j.x;
+	pointer.y = 1 - j.y;
 	
 	var CameraMatrix = CameraGetMatrix();
 	var CameraPos = CameraGetPosition();
 	
-	//camera translation
-	var dX = (j.y - 0.5 < -DEADZONE || j.y - 0.5 > DEADZONE) ? j.y - 0.5 : 0;
-	CameraPos += CameraGetZAxis() * dX * TR_SENSITIVITY; // + CameraGetXAxis() * (j.y - 0.5) * TR_SENSITIVITY;
-	CameraSetPosition(CameraPos);
+	if (j.Buttons%2==1 && lastButtons%2==0) 
+		joyMode = (joyMode == LOOK ? MOVE : LOOK);
+		
+	lastButtons = j.Buttons;
 	
-	//camera rotation
-	var dR = (j.x - 0.5 < -DEADZONE || j.x - 0.5 > DEADZONE) ? j.x - 0.5 : 0;
-	CameraRotate(dR*ROT_SENSITIVITY,0,1,0);
+	//camera translation
+	var dX = (j.u - 0.5 < -DEADZONE || j.u - 0.5 > DEADZONE) ? j.u - 0.5 : 0;
+	var dY = (j.r - 0.5 < -DEADZONE || j.r - 0.5 > DEADZONE) ? j.r - 0.5 : 0;
+	
+	if(joyMode == LOOK) {
+		//camera rotation
+		CameraRotateABS(dY*ROT_SENSITIVITY,1,0,0);
+		CameraRotate(dX*ROT_SENSITIVITY,0,1,0);
+	} else {
+		//CameraPos += CameraGetZAxis() * dY * TR_SENSITIVITY; // + CameraGetXAxis() * dY; // + CameraGetXAxis() * (j.y - 0.5) * TR_SENSITIVITY;
+		CameraPos += CameraGetXAxis() * dX * TR_SENSITIVITY + CameraGetZAxis() * dY * TR_SENSITIVITY;
+		CameraPos.y = 1.8;
+		CameraSetPosition(CameraPos);
+	}
 }	
 
 // Camera manager (using mouse)
@@ -357,7 +386,7 @@ function CameraMoveMouse()
 			var dX = Mouse.X - PrecX;
 			var d = 1 + (PrecY - Mouse.Y) * SCALE_SENSITIVITY;
 			
-			ConsoleText(0.05, 0.18, Sprintf("mouse scale: %.4f",d));
+			//ConsoleText(0.05, 0.18, Sprintf("mouse scale: %.4f",d));
 		 	shapes[curShape].bounds.x *= d;
 		 	shapes[curShape].bounds.y *= d;
 		 	shapes[curShape].bounds.z *= d;
@@ -376,7 +405,7 @@ function CameraMoveMouse()
 			
 			var dir = Norm(shapes[curShape].pos - camPos) ^ [0,1,0];
 			
-			ConsoleText(0.05, 0.18, Sprintf("dx: %.4f,dy: %.4f,dir: [%.2f,%.2f,%.2f]",dX,dY,dir.x,dir.y,dir.z));
+			//ConsoleText(0.05, 0.18, Sprintf("dx: %.4f,dy: %.4f,dir: [%.2f,%.2f,%.2f]",dX,dY,dir.x,dir.y,dir.z));
 		 	shapes[curShape].pos.y += dY;
 		 	shapes[curShape].pos.x += dX * dir.x;
 		 	shapes[curShape].pos.z += dX * dir.z;
@@ -465,9 +494,9 @@ function getNewKeyboardEvents()
 	shapes[curShape].CalcBounds(scale);
 	shapes[curShape].CheckBounds();
 	
-	ConsoleText(0.05, 0.15, Sprintf("bounds: %.2f %.2f %.2f",shapes[curShape].bounds.x,shapes[curShape].bounds.y,shapes[curShape].bounds.z));
-	ConsoleText(0.05, 0.12, Sprintf("position: %.2f %.2f %.2f",shapes[curShape].pos.x,shapes[curShape].pos.y,shapes[curShape].pos.z));
-	ConsoleText(0.05, 0.09, Sprintf("bot, top: %.2f %.2f",shapes[curShape].corners[0].y,shapes[curShape].corners[2].y));
+	//ConsoleText(0.05, 0.15, Sprintf("bounds: %.2f %.2f %.2f",shapes[curShape].bounds.x,shapes[curShape].bounds.y,shapes[curShape].bounds.z));
+	//ConsoleText(0.05, 0.12, Sprintf("position: %.2f %.2f %.2f",shapes[curShape].pos.x,shapes[curShape].pos.y,shapes[curShape].pos.z));
+	//ConsoleText(0.05, 0.09, Sprintf("bot, top: %.2f %.2f",shapes[curShape].corners[0].y,shapes[curShape].corners[2].y));
 	
 	if(key == "n")  {
 		aadd(shapes, Shape());
