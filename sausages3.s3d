@@ -10,10 +10,15 @@ SET SCENE_FAR  = 1000;
 #define LOOK 1
 #define MOVE 2
 // TODO: put your global variables here
-
+//#define CAVE
 
 /* Camera globals */
-var CamPos = [0.0, 1.8, 30.0]; 	// camera position
+#ifdef CAVE
+var CamPos = [0.0, 1.1, 2.0]; 	// camera position
+#else
+var CamPos = [0.0, 1.1, 10.0];
+#endif
+
 var shapes;
 var curShape = 0;
 var MAXBOUND = 50;
@@ -21,14 +26,19 @@ var dP = 0.000001;
 var scaling = false;
 var joyMode = LOOK;
 var lastButtons = 0;
+var worldRotation = 0;
 var pointer = [0.5,0.5,0];
+var smallShape;
+var endVert = Vector(3);
+var wandRot = [90,-90,0];
+var b = Array(16);
 
 /* Function declarations */
 function CameraMoveMouse();
 function getNewKeyboardEvents();
 function DrawGrid(col, size);
 function joystickMove();
-function DrawCrossHairs();
+function DrawLine(visible);
 function PickShape();
 
 class Shape 
@@ -45,6 +55,7 @@ class Shape
 	CalcBounds(scale);
 	CheckBounds();
 	CheckValues( bound, lt, olt, ort, bt, tp, obt, otp, ft, bk, oft, obk );
+	DistanceToLine(x1, x2);
 	
 	GetLeft();
 	GetRight();
@@ -253,6 +264,10 @@ function Shape::GetFront() {
 function Shape::GetBack() {
 	return pos.z + bounds.z;
 }
+function Shape::DistanceToLine(x1, x2) {
+//http://mathworld.wolfram.com/Point-LineDistance3-Dimensional.html
+	return modulus((pos - x1) ^ (pos - x2)) / modulus(x2 - x1);
+}
 function OnDownload()
 {
 	// TODO: download your resources here
@@ -266,13 +281,21 @@ function OnInit(params)
 	SceneSetParam(VR_HEADTRACKER,1);
 	/* initialize camera */
 	CameraGetCurrent().SetPosition(CamPos);
-	
+		
 	shapes = Array(2);
 	
 	shapes[0] = Shape();
 	shapes[0].pos = [0,1,2.5];
 	shapes[1] = Shape();
 	shapes[1].pos = [0,1,0];
+	
+	smallShape = Shape();
+	smallShape.pos = [0,1,0];
+	smallShape.CalcBounds([0.1,0.1,0.1]);
+	
+	#ifndef CAVE
+	for (var i = 0; i < 16; i++) b[i] = 0;
+	#endif
 }
 
 
@@ -285,27 +308,67 @@ function OnFrame()
 	SetClearColor(0,0,0);
 	SceneBegin();
 	
-	DrawGrid([0.5, 0.5, 0.5], 100);
+
+	var CameraPos = CameraGetPosition() + GetTrackerPos(0);
+	glTranslate(CameraPos);
+	glRotate(worldRotation,0,1,0);
+	glTranslate(-CameraPos);
+	
+	DrawGrid([0.5, 0.5, 0.5], 10);
+	
+	DrawLine(true); //b[5] == 1);
+	curShape = -1;
+	var closest = 1000;
+	for (var i = 0; i < len(shapes); i++) {
+		var dis = shapes[i].DistanceToLine(smallShape.pos, endVert);
+		if(dis < closest) {
+			curShape = i;
+			closest = dis;
+		}
+		ConsoleText(0.1,0.03*i,Sprintf("distance: %.2f - %i", shapes[i].DistanceToLine(smallShape.pos, endVert), curShape));
+	}
 	
 	for (var i = 0; i < len(shapes); i++) {
 		if(curShape == i) glColor(.26,.71,.90);
 		shapes[i].DrawShape();
 		if(curShape == i) glColor(1,1,1);
 	}
-	DrawCrossHairs();
-	PickShape();
+	
+	smallShape.DrawShape();
 	SceneEnd();
 }
 
-function DrawCrossHairs() 
+function DrawLine(visible) 
 {
-	ConsoleWidth( 1 );
-	ConsoleLines( [ pointer.x,pointer.y-0.03,pointer.x,pointer.y-0.01 ] );
-	ConsoleLines( [ pointer.x,pointer.y+0.01,pointer.x,pointer.y+0.03 ] );
-	ConsoleLines( [ pointer.x-0.025,pointer.y,pointer.x-0.01,pointer.y ] );
-	ConsoleLines( [ pointer.x+0.01,pointer.y,pointer.x+0.025,pointer.y ] );
+	//spherical co ordinates
+	//http://electron9.phys.utk.edu/vectors/3dcoordinates.htm
+	var q = wandRot.x / 180 * PI;
+	var f = wandRot.y / 180 * PI;
+	
+	endVert.x = 100 * Sin(q) * Cos(f);
+	endVert.y = 100 * Cos(q);
+	endVert.z = 100 * Sin(q) * Sin(f);
+	
+	if(!visible) return;
+	glPushAttrib(GL_LIGHTING_BIT | GL_LINE_BIT | GL_CURRENT_BIT);
+	
+	glLineWidth(1);
+	glDisable(GL_LIGHTING);
+	
+	glEnable (GL_LINE_STIPPLE);
+	glLineStipple (1, 0x00FF);
+	glBegin(GL_LINES);
+		glVertex(smallShape.pos);
+		glVertex(endVert);
+	glEnd();
+	glDisable (GL_LINE_STIPPLE);
+	
 }
-function PickShape(){}
+function PickShape(){
+
+
+
+}
 function DownloadReady(RequestID)
 {
 	// TODO
@@ -327,45 +390,104 @@ function OnExit()
 
 function joystickMove()
 {
-	var TR_SENSITIVITY  = 0.5 ;
+	var MV_SENSITIVITY  = 0.05 ;
 	var ROT_SENSITIVITY = 2;
 	var DEADZONE  = 0.1;
-
-	var j = CVmJoystick();		
-	// Complain if no joystick is connected
-	if (!j.enabled)
+	
+	var buts = GetTrackerButtons(1);
+	
+	#ifndef CAVE
+	var j = CVmJoystick();
+	if (j.enabled) {
+	#endif
+	for (var i=0;i<=15;i+=1)
 	{
-		ConsoleText(0.1,0.9,"To run the joystick demo, connect a joystick and restart.");
-		return;
+		if(1==(buts%2) || b[i] == 1) b[i] = 1;
+		else b[i] = 0;
+		buts/=2;
 	}
+	#ifndef CAVE
+	}
+	#endif
 	
-	ConsoleText(0.1,0.9,Sprintf("j.x: %.2f, j.y: %.2f, j.z %.2f, j.r: %.2f, j.u: %.2f, j.v: %.2f",j.x,j.y,j.z,j.r,j.u,j.v));
-	
-	pointer.x = j.x;
-	pointer.y = 1 - j.y;
+	var headpos = GetTrackerPos(0);
+	var headrot = GetTrackerRot(0);
+	var wandpos = GetTrackerPos(1);
+	#ifdef CAVE
+	wandrot = GetTrackerRot(1);
+	buts = GetTrackerButtons(1);
+	#else
+	buts = j.Buttons;
+	#endif
+	var joystick = GetTrackerJoy(1);
 	
 	var CameraMatrix = CameraGetMatrix();
 	var CameraPos = CameraGetPosition();
 	
-	if (j.Buttons%2==1 && lastButtons%2==0) 
+	ConsoleText(0.1,0.15,Sprintf("head pos: %.2f, %.2f, %.2f", headpos.x, headpos.y, headpos.z));
+	ConsoleText(0.1,0.18,Sprintf("head rot: %.2f, %.2f, %.2f", headrot.x, headrot.y, headrot.z));
+	ConsoleText(0.1,0.21,Sprintf("wand pos: %.2f, %.2f, %.2f : %i", wandpos.x, wandpos.y, wandpos.z, worldRotation));
+	ConsoleText(0.1,0.24,Sprintf("wand rot: %.2f, %.2f, %.2f", wandrot.x, wandrot.y, wandrot.z));
+	ConsoleText(0.1,0.27,Sprintf("wand valuator: %.2f, %.2f", joystick.x, joystick.y));
+	ConsoleText(0.1,0.30,Sprintf("buttons: %i, red: %i, yellow: %i, green: %i, blue: %i, joy butt: %i, trigger: %i", buts, b[0], b[1], b[2], b[3], b[4], b[5]));
+	
+	if (buts%2==1 && lastButtons%2==0) 
 		joyMode = (joyMode == LOOK ? MOVE : LOOK);
 		
-	lastButtons = j.Buttons;
+	lastButtons = buts;
 	
 	//camera translation
-	var dX = (j.u - 0.5 < -DEADZONE || j.u - 0.5 > DEADZONE) ? j.u - 0.5 : 0;
-	var dY = (j.r - 0.5 < -DEADZONE || j.r - 0.5 > DEADZONE) ? j.r - 0.5 : 0;
+	#ifdef CAVE
+	var adjU = (joystick.x + 1) / 2;
+	var adjR = (joystick.y + 1) / 2;
+	#else
+	var adjU  = j.x;
+	var adjR = 1 - j.y;
+	#endif
+	var dX = (adjU - 0.5 < -DEADZONE || adjU - 0.5 > DEADZONE) ? adjU - 0.5 : 0;
+	var dY = (adjR - 0.5 < -DEADZONE || adjR - 0.5 > DEADZONE) ? adjR - 0.5 : 0;
 	
 	if(joyMode == LOOK) {
 		//camera rotation
-		CameraRotateABS(dY*ROT_SENSITIVITY,1,0,0);
-		CameraRotate(dX*ROT_SENSITIVITY,0,1,0);
+		worldRotation += dX*ROT_SENSITIVITY;
 	} else {
-		//CameraPos += CameraGetZAxis() * dY * TR_SENSITIVITY; // + CameraGetXAxis() * dY; // + CameraGetXAxis() * (j.y - 0.5) * TR_SENSITIVITY;
-		CameraPos += CameraGetXAxis() * dX * TR_SENSITIVITY + CameraGetZAxis() * dY * TR_SENSITIVITY;
-		CameraPos.y = 1.8;
+		CameraPos += VectorRotate(-worldRotation,0,1,0,CameraGetXAxis(),true) * dX * MV_SENSITIVITY + VectorRotate(-worldRotation,0,1,0,CameraGetZAxis(),true) * -dY * MV_SENSITIVITY;
+		CameraPos.y = 1.1;
 		CameraSetPosition(CameraPos);
 	}
+	
+	#ifdef CAVE
+	smallShape.pos = CameraPos + wandpos;
+	#else
+	var dV = Vector(3);
+	dV.x = 0.4;
+	dV.y = -0.2;
+	dV.z = -0.5;
+	smallShape.pos = CameraPos + dV;
+	#endif
+	
+	static var translate = false;
+	static var PrecSphereX = 0, PrecSphereY = 0;
+	var TR_SENSITIVITY = 0.01;
+	//translate
+	if(b[5]==1 && curShape > -1) {
+		if(translate) {
+			var dF = (WandRot.x - PrecSphereX) / 180 * PI;
+			var dQ = (WandRot.y - PrecSphereY) / 180 * PI;
+			
+			var r = sqrt((shapes[curShape].pos.z - smallShape.pos.z)*(shapes[curShape].pos.z - smallShape.pos.z)
+							+ (shapes[curShape].pos.x - smallShape.pos.x)*(shapes[curShape].pos.x - smallShape.pos.x)
+							+ (shapes[curShape].pos.y - smallShape.pos.y)*(shapes[curShape].pos.y - smallShape.pos.y));
+			shapes[curShape].pos.x += r * sin(dQ) * cos(dF);
+			shapes[curShape].pos.z += r * sin(dQ) * sin(dF);
+			//shapes[curShape].pos.y += r * cos(dQ);
+			//shapes[curShape].pos.x += r * tan(dY / 180 * PI);
+		}
+		translate = true;
+		PrecSphereX = wandRot.x;
+		PrecSphereY = wandRot.y;
+	} else translate = false;	
+		
 }	
 
 // Camera manager (using mouse)
@@ -443,13 +565,14 @@ function CameraMoveMouse()
 		{
 			var CameraMatrix = CameraGetMatrix();
 			var CameraPos = CameraGetPosition();
-			if (!Mouse.ButtonL) 
+			if (!Mouse.ButtonL) {
 			//====  Translation on X and Z axis ====//
 				CameraPos += CameraGetZAxis() * (Mouse.y-PrecY)*TR_SENSITIVITY + CameraGetXAxis() * (Mouse.X- PrecX)*TR_SENSITIVITY;
-			else
+				CameraPos.y = 1.8;
+			} else
 			//====  Right + Left Button: Translation on Y axis ====//
 				CameraPos -= CameraGetYAxis() * (Mouse.y-PrecY)*TR_SENSITIVITY;
-
+			
 			CameraSetPosition(CameraPos);		
 		}
 		else
@@ -490,9 +613,29 @@ function getNewKeyboardEvents()
 	if(key == "r") shapes[curShape].pos.z -= 0.1;
 	else if(key == "f") shapes[curShape].pos.z += 0.1;
 	
+	if(key == "t") wandRot.y -= 10;
+	else if(key == "y") wandRot.y += 10;
 	
-	shapes[curShape].CalcBounds(scale);
-	shapes[curShape].CheckBounds();
+	if(key == "g") wandRot.x -= 10;
+	else if(key == "h") wandRot.x += 10;
+	
+	if(key == "u") wandRot.z -= 10;
+	else if(key == "i") wandRot.z += 10;
+	
+	if(key == "0") b[0] = (b[0] == 0 ? 1 : 0);
+	if(key == "1") b[1] = (b[1] == 0 ? 1 : 0);
+	if(key == "2") b[2] = (b[2] == 0 ? 1 : 0);
+	if(key == "3") b[3] = (b[3] == 0 ? 1 : 0);
+	if(key == "4") b[4] = (b[4] == 0 ? 1 : 0);
+	if(key == "5") b[5] = (b[5] == 0 ? 1 : 0);
+	
+	if (key == "<") worldRotation -= 5;
+	else if (key == ">") worldRotation += 5;
+	
+	if(curShape > -1) {
+		shapes[curShape].CalcBounds(scale);
+		shapes[curShape].CheckBounds();
+	}
 	
 	//ConsoleText(0.05, 0.15, Sprintf("bounds: %.2f %.2f %.2f",shapes[curShape].bounds.x,shapes[curShape].bounds.y,shapes[curShape].bounds.z));
 	//ConsoleText(0.05, 0.12, Sprintf("position: %.2f %.2f %.2f",shapes[curShape].pos.x,shapes[curShape].pos.y,shapes[curShape].pos.z));
