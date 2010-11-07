@@ -317,16 +317,7 @@ function OnFrame()
 	DrawGrid([0.5, 0.5, 0.5], 10);
 	
 	DrawLine(true); //b[5] == 1);
-	curShape = -1;
-	var closest = 1000;
-	for (var i = 0; i < len(shapes); i++) {
-		var dis = shapes[i].DistanceToLine(smallShape.pos, endVert);
-		if(dis < closest) {
-			curShape = i;
-			closest = dis;
-		}
-		ConsoleText(0.1,0.03*i,Sprintf("distance: %.2f - %i", shapes[i].DistanceToLine(smallShape.pos, endVert), curShape));
-	}
+	if(b[5] == 0) PickShape();
 	
 	for (var i = 0; i < len(shapes); i++) {
 		if(curShape == i) glColor(.26,.71,.90);
@@ -343,11 +334,13 @@ function DrawLine(visible)
 	//spherical co ordinates
 	//http://electron9.phys.utk.edu/vectors/3dcoordinates.htm
 	var q = wandRot.x / 180 * PI;
-	var f = wandRot.y / 180 * PI;
+	var f = (wandRot.y + worldRotation) / 180 * PI;
 	
 	endVert.x = 100 * Sin(q) * Cos(f);
 	endVert.y = 100 * Cos(q);
 	endVert.z = 100 * Sin(q) * Sin(f);
+	
+	VectorRotate(-worldRotation,0,1,0,endVert,false);
 	
 	if(!visible) return;
 	glPushAttrib(GL_LIGHTING_BIT | GL_LINE_BIT | GL_CURRENT_BIT);
@@ -365,9 +358,16 @@ function DrawLine(visible)
 	
 }
 function PickShape(){
-
-
-
+	curShape = -1;
+	var closest = 1000;
+	for (var i = 0; i < len(shapes); i++) {
+		var dis = shapes[i].DistanceToLine(smallShape.pos, endVert);
+		if(dis < closest) {
+			curShape = i;
+			closest = dis;
+		}
+		ConsoleText(0.1,0.03*i,Sprintf("distance: %.2f - %i", shapes[i].DistanceToLine(smallShape.pos, endVert), curShape));
+	}
 }
 function DownloadReady(RequestID)
 {
@@ -451,19 +451,20 @@ function joystickMove()
 		//camera rotation
 		worldRotation += dX*ROT_SENSITIVITY;
 	} else {
-		CameraPos += VectorRotate(-worldRotation,0,1,0,CameraGetXAxis(),true) * dX * MV_SENSITIVITY + VectorRotate(-worldRotation,0,1,0,CameraGetZAxis(),true) * -dY * MV_SENSITIVITY;
+		CameraPos += VectorRotate(-worldRotation,0,1,0,CameraGetXAxis(),true) * dX * MV_SENSITIVITY 
+					+ VectorRotate(-worldRotation,0,1,0,CameraGetZAxis(),true) * -dY * MV_SENSITIVITY;
 		CameraPos.y = 1.1;
 		CameraSetPosition(CameraPos);
 	}
 	
 	#ifdef CAVE
-	smallShape.pos = CameraPos + wandpos;
+	smallShape.pos = CameraPos + VectorRotate(-worldRotation,0,1,0,wandpos,false);
 	#else
 	var dV = Vector(3);
 	dV.x = 0.4;
 	dV.y = -0.2;
 	dV.z = -0.5;
-	smallShape.pos = CameraPos + dV;
+	smallShape.pos = CameraPos +  VectorRotate(-worldRotation,0,1,0,dV,false);
 	#endif
 	
 	static var translate = false;
@@ -472,16 +473,21 @@ function joystickMove()
 	//translate
 	if(b[5]==1 && curShape > -1) {
 		if(translate) {
-			var dF = (WandRot.x - PrecSphereX) / 180 * PI;
-			var dQ = (WandRot.y - PrecSphereY) / 180 * PI;
+			//http://www.euclideanspace.com/maths/geometry/affine/aroundPoint/index.htm
+			var dX = (WandRot.x - PrecSphereX) / 180 * PI;
+			var dY = (WandRot.y - PrecSphereY) / 180 * PI;
 			
-			var r = sqrt((shapes[curShape].pos.z - smallShape.pos.z)*(shapes[curShape].pos.z - smallShape.pos.z)
-							+ (shapes[curShape].pos.x - smallShape.pos.x)*(shapes[curShape].pos.x - smallShape.pos.x)
-							+ (shapes[curShape].pos.y - smallShape.pos.y)*(shapes[curShape].pos.y - smallShape.pos.y));
-			shapes[curShape].pos.x += r * sin(dQ) * cos(dF);
-			shapes[curShape].pos.z += r * sin(dQ) * sin(dF);
-			//shapes[curShape].pos.y += r * cos(dQ);
-			//shapes[curShape].pos.x += r * tan(dY / 180 * PI);
+			var ca = cos(dY); var sa = sin(dY); var cb = cos(dX); var sb = sin(dX);
+			var res = MatrixMultiplyVector_4(
+					[ca, sa*sb, sa*cb, smallShape.pos.x - ca * smallShape.pos.x - sa*sb * smallShape.pos.y - sa*cb * -smallShape.pos.z,
+					0, cb, -sb, -cb * smallShape.pos.y - cb * smallShape.pos.y + cb * smallShape.pos.z,
+					-sa, ca*sb, ca*cb, -smallShape.pos.z + sa * smallShape.pos.x + ca*sb * smallShape.pos.y - ca*cb * -smallShape.pos.z,
+					0, 0, 0, 1],
+					[shapes[curShape].pos.x, shapes[curShape].pos.y, shapes[curShape].pos.z, 1]
+			);
+			shapes[curShape].pos.x = res.x;
+			shapes[curShape].pos.y = res.y;
+			shapes[curShape].pos.z = res.z;
 		}
 		translate = true;
 		PrecSphereX = wandRot.x;
