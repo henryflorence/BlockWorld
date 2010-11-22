@@ -488,6 +488,7 @@ function OnFrame()
 {
 	/* manage camera */
 	joystickMove();
+	CameraMoveMouse();
 	
 	SetClearColor(0,0,0);
 	SceneBegin();
@@ -678,18 +679,8 @@ function joystickMove()
 	
 	//smallShape.pos = CameraPos + wandpos;
 	smallShape.pos = CameraPos + headpos + VectorRotate(-worldRotation, 0, 1, 0, wandpos - headpos, false);
-	//smallShape.rot = wandrot;
-	var vec = Vector(3);
-	vec.z = -1;
-	vec = VectorRotate(wandRot.x,1,0,0,vec,false);
-	vec = VectorRotate(wandRot.y - worldRotation,0,1,0,vec,false);
-	vec = VectorRotate(wandRot.z,0,0,1,vec,false);
-	
-	var ang = vec * [0,0,-1];
-	var cross = vec ^ [0,0,-1];
-	smallShape.rot = VectorRotate(ang, cross, smallShape.rot, false);
-	//smallShape.rot.y -= worldRotation;
-	//smallShape.rot.x -= worldRotation;
+	smallShape.rot = wandrot;
+	smallShape.rot.x += worldRotation;
 	
 	static var PrecSphereX = 0, PrecSphereY = 0;
 	var TR_SENSITIVITY = 0.01;
@@ -809,4 +800,65 @@ function DrawGrid(col, size)
 	
 	/* polite restoration of previous OpenGL status */
 	glPopAttrib();
+}
+
+// Camera manager (using mouse)
+function CameraMoveMouse()
+{
+	static var InMouseR = false, InMouseL = false;				
+	static var PrecX = 0, PrecY = 0;			
+	// Change these values to modify the mouse sensitivity
+	var TR_SENSITIVITY  = 0.0001 ;//* SceneScale;
+	var ROT_SENSITIVITY = 0.01;
+	// Mouse manager
+	if(Mouse.ButtonL && !Mouse.ButtonR)
+	{
+		//====  Left Button: Camera rotation  ====//
+		if (InMouseL)
+		{			
+			CameraRotate(( Mouse.X-PrecX)*ROT_SENSITIVITY,0,1,0);
+			CameraRotateABS((Mouse.Y-PrecY)*ROT_SENSITIVITY,1,0,0);		
+		}
+		else
+		{
+			PrecX = Mouse.X;
+			PrecY = Mouse.Y;
+		}
+		InMouseL = true;
+		InMouseR = false;
+	}
+	else
+	if(Mouse.ButtonR)
+	{
+	
+		//====  Right Button: Camera translation  ====//
+		if (InMouseR)
+		{
+			var CameraMatrix = CameraGetMatrix();
+			var CameraPos = CameraGetPosition();
+			if (!Mouse.ButtonL) 
+			//====  Translation on X and Z axis ====//
+				CameraPos += CameraGetZAxis() * (Mouse.y-PrecY)*TR_SENSITIVITY + CameraGetXAxis() * (Mouse.X- PrecX)*TR_SENSITIVITY;
+			else
+			//====  Right + Left Button: Translation on Y axis ====//
+				CameraPos -= CameraGetYAxis() * (Mouse.y-PrecY)*TR_SENSITIVITY;
+
+			CameraSetPosition(CameraPos);		
+		}
+		else
+		{
+			PrecX = Mouse.X;
+			PrecY = Mouse.Y;
+		}
+		InMouseR = true;
+		InMouseL = false;
+	}	
+	else
+	{
+		InMouseR = false;
+		InMouseL = false;
+	}
+	/*
+	var CameraPos = CameraGetPosition();
+	var CameraDir = CameraGetDirection();*/
 }
