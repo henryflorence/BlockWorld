@@ -10,18 +10,27 @@ SET SCENE_FAR  = 1000;
 #define LOOK 1
 #define MOVE 2
 
+<<<<<<< HEAD
 #define TRANSLATE_MODE 0
 #define SCALE_MODE 1 
 #define TEXTURE_MODE 2
 #define NUM_MODES 3
 
 //#define HIGHPOLY
+=======
+#define TRANSLATE_MODE 1
+#define SCALE_MODE 2 
+>>>>>>> 1759b7eb418eb63b771d947378ecd18973b76c98
 // TODO: put your global variables here
 //#define CAVE
 
 /* Camera globals */
 //#ifdef CAVE
+<<<<<<< HEAD
 var CamPos = [0.0, 1.1, 0.0]; 	// camera position
+=======
+var CamPos = [0.0, 1.1, 2.0]; 	// camera position
+>>>>>>> 1759b7eb418eb63b771d947378ecd18973b76c98
 
 
 var shapes;
@@ -36,12 +45,16 @@ var worldRotation = 0;
 var pointer = [0.5,0.5,0];
 var smallShape;
 var skyDome;
+<<<<<<< HEAD
 var furnitureObj;
 var furnitureMesh;
+=======
+>>>>>>> 1759b7eb418eb63b771d947378ecd18973b76c98
 var endVert = Vector(3);
 var wandRot = [0,0,0];
 var b = Array(16);
 var kb = Array(16);
+<<<<<<< HEAD
 var headpos = [1.5,1.8,1.5];
 
 /* Light globals */
@@ -51,6 +64,9 @@ var Light2;
 var PosL = [0.0, 10.0, 10.0];	// default light position
 
 var mSelect;
+=======
+var headpos = [1.1,1.8,2];
+>>>>>>> 1759b7eb418eb63b771d947378ecd18973b76c98
 /* Function declarations */
 function CameraMoveMouse();
 function getNewKeyboardEvents();
@@ -102,6 +118,7 @@ class MeshShape : Shape
 	var tex;
 	var obj;
 	
+<<<<<<< HEAD
 	SetMesh(file, normalise);
 	DrawShape();
 	Clone(oldShape);
@@ -127,6 +144,16 @@ function MeshShape::SetMesh(file, normalise)
 	newBounds.z = (ObjBounds[2] + ObjBounds[5]) / 2;
 	
 	Shape::bounds = newBounds;
+=======
+	SetMesh(file);
+	DrawShape();
+};
+function MeshShape::SetMesh(file)
+{
+	mesh = CVmNewMesh(file);
+	obj = CVmObj();
+	obj.LinkToMesh(mesh);
+>>>>>>> 1759b7eb418eb63b771d947378ecd18973b76c98
 }
 function Shape::Shape()
 {
@@ -446,6 +473,7 @@ function OnInit(params)
 	
 	//smallShape = Shape();
 	smallShape = MeshShape();
+<<<<<<< HEAD
 	smallShape.SetMesh("pointer.aam", false);
 	smallShape.pos = [0,1,0];
 	smallShape.CalcBounds([0.1,0.1,0.1]);
@@ -481,6 +509,13 @@ function OnInit(params)
 	furnitureMesh = CVmNewMesh("sceneData\\furniture.aam");
  	furnitureObj  = CVmObj();
     furnitureObj.LinkToMesh(furnitureMesh); 
+=======
+	smallShape.SetMesh("pointer.aam");
+	smallShape.pos = [0,1,0];
+	smallShape.CalcBounds([0.1,0.1,0.1]);
+	
+	for (var i = 0; i < 16; i++) kb[i] = b[i] = 0;
+>>>>>>> 1759b7eb418eb63b771d947378ecd18973b76c98
 }
 
 
@@ -505,7 +540,7 @@ function OnFrame()
 	
 	
 	for (var i = 0; i < len(shapes); i++) {
-		if(curShape == i) glColor(.26,.71,.90);
+	if(curShape == i) glColor(.26,.71,.90);
 		shapes[i].DrawShape();
 		if(curShape == i) glColor(1,1,1);
 	}
@@ -618,8 +653,13 @@ function joystickMove()
 	var headrot = [0,0,0];
 	var wandpos = [0.4,-0.1,-1.0];
 	if (j.enabled) {
+<<<<<<< HEAD
 		if (j.u < 0.5 - DEADZONE || j.u > 0.5 + DEADZONE) wandrot.y -= (j.u - 0.5) * 5;
 		if (j.r < 0.5 - DEADZONE || j.r > 0.5 + DEADZONE) wandrot.x += (j.r - 0.5) * 5;
+=======
+		if (j.u < 0.5 - DEADZONE || j.u > 0.5 + DEADZONE) wandrot.y -= (j.u - 0.5);
+		if (j.r < 0.5 - DEADZONE || j.r > 0.5 + DEADZONE) wandrot.x += (j.r - 0.5);
+>>>>>>> 1759b7eb418eb63b771d947378ecd18973b76c98
 	}
 	#endif
 	var joystick = GetTrackerJoy(1);
@@ -639,6 +679,7 @@ function joystickMove()
 		joyMode = (joyMode == LOOK ? MOVE : LOOK);
 	
 	if (b[1]==1 && lastButtons/2%2==0 && b[5] == 0)
+<<<<<<< HEAD
 		opMode = (opMode + 1) % NUM_MODES;
 	
 	if (b[2]==1 && lastButtons/4%2==0 && b[5] == 0) {
@@ -647,6 +688,11 @@ function joystickMove()
 	}	
 		
 	ConsoleText(0,0.98,Sprintf("%s | %s", joyMode == LOOK ? "look" : "move", opMode == TRANSLATE_MODE ? "translate" : (opMode == SCALE_MODE ? "scale" : "object")));	
+=======
+		opMode = (opMode == TRANSLATE_MODE ? SCALE_MODE : TRANSLATE_MODE);
+	
+	ConsoleText(0,0.98,Sprintf("%s | %s", joyMode == LOOK ? "look" : "move", opMode == TRANSLATE_MODE ? "translate" : "scale"));	
+>>>>>>> 1759b7eb418eb63b771d947378ecd18973b76c98
 	lastButtons = buts;
 	
 	//camera translation
@@ -654,12 +700,17 @@ function joystickMove()
 	var adjU = (joystick.x + 1) / 2;
 	var adjR = (joystick.y + 1) / 2;
 	#else
+<<<<<<< HEAD
 	var adjU = 0.5;
 	var adjR = 0.5;
 	if(j.enabled) {
 		adjU = j.x;
 		adjR = 1 - j.y;
 	}
+=======
+	var adjU = j.x;
+	var adjR = 1 - j.y;
+>>>>>>> 1759b7eb418eb63b771d947378ecd18973b76c98
 	#endif
 	var dX = (adjU - 0.5 < -DEADZONE || adjU - 0.5 > DEADZONE) ? adjU - 0.5 : 0;
 	var dY = (adjR - 0.5 < -DEADZONE || adjR - 0.5 > DEADZONE) ? adjR - 0.5 : 0;
@@ -678,6 +729,7 @@ function joystickMove()
 	
 	//smallShape.pos = CameraPos + wandpos;
 	smallShape.pos = CameraPos + headpos + VectorRotate(-worldRotation, 0, 1, 0, wandpos - headpos, false);
+<<<<<<< HEAD
 	//smallShape.rot = wandrot;
 	var vec = Vector(3);
 	vec.z = -1;
@@ -690,13 +742,22 @@ function joystickMove()
 	smallShape.rot = VectorRotate(ang, cross, smallShape.rot, false);
 	//smallShape.rot.y -= worldRotation;
 	//smallShape.rot.x -= worldRotation;
+=======
+	smallShape.rot = wandrot;
+	//smallShape.rot = VectorRotate(-worldRotation, 0, 1, 0, smallShape.rot, false);
+	smallShape.rot.y -= worldRotation;
+>>>>>>> 1759b7eb418eb63b771d947378ecd18973b76c98
 	
 	static var PrecSphereX = 0, PrecSphereY = 0;
 	var TR_SENSITIVITY = 0.01;
 	//translate
+<<<<<<< HEAD
 	mSelect.preVisible = mSelect.visible;
 	mSelect.visible = false;
 	if(b[5]==1 && curShape > -1 && opMode < TEXTURE_MODE) {
+=======
+	if(b[5]==1 && curShape > -1) {
+>>>>>>> 1759b7eb418eb63b771d947378ecd18973b76c98
 		var dX = WandRot.x - PrecSphereX;
 		var dY = WandRot.y - PrecSphereY;			
 
@@ -708,6 +769,7 @@ function joystickMove()
 		} else if (opMode == SCALE_MODE) {		
 			shapes[curShape].bounds *= dX / 10 + 1;
 		}	
+<<<<<<< HEAD
 	} else if (b[5]==1 && opMode == TEXTURE_MODE && curShape > -1) {
 		//shapes[curShape] = MeshShape(shapes[curShape]);
 		//shapes[curShape].SetMesh("meshes//tree1.aam", true);
@@ -725,6 +787,11 @@ function joystickMove()
 			shapes[curShape].SetMesh(mSelect.selected, true);	
 		}
 	}
+=======
+	} 
+	PrecSphereX = wandRot.x;
+	PrecSphereY = wandRot.y;
+>>>>>>> 1759b7eb418eb63b771d947378ecd18973b76c98
 }	
 function getNewKeyboardEvents()
 {
