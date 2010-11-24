@@ -397,20 +397,31 @@ function MeshSelector::MeshSelector() {
 
 	for(var i = 0; i < len(fileNames); i++) {
 		var mesh = CVmNewMesh(fileNames[i]);
+		#ifdef CAVE
 		mesh.Normalize(0.1);
-		
+		#else
+		mesh.Normalize(0.5);
+		#endif
 		meshes[i] = CVmObj();
 		meshes[i].LinkToMesh(mesh);
 	}
 }
 function MeshSelector::Draw() {
 	
+	#ifdef CAVE
+	var centre = CameraGetPosition() + headpos;
+	#else
 	var centre = CameraGetPosition(); // + headpos;
+	#endif
 	
 	var d = 3;
 	var selectedMesh = -1;
 	var rads = rot;
+	#ifdef CAVE
 	var r = 0.35;
+	#else
+	var r = 2;
+	#endif
 	for (var i = 0; i < len(meshes); i++) {
 		meshes[i].SetPosition(centre.x + r * sin(rads), centre.y, centre.z - r * cos(rads));
 		if (Abs(rads) < d) { //checks to see if this shape is selected
@@ -424,7 +435,8 @@ function MeshSelector::Draw() {
 		rads += 0.4; //distance between shapes
 	}
 	if (selectedMesh > -1) {
-		meshes[selectedMesh].DrawBoundingBox(VR_WIREFRAME | VR_NOSHADING);
+		glColor(.26,.71,.90);
+		meshes[selectedMesh].DrawBoundingBox();
 		selected = fileNames[selectedMesh];
 	} else selected = 0;
 }
@@ -472,7 +484,7 @@ function OnInit(params)
 	for(var i = 0; i < 6; i++) {
 		outputln(i);
 		skyLights[i] = CVmLight();
-		skyLights[i].SetDiffuse(10, 10, 10);
+		skyLights[i].SetDiffuse(.5, .5, .5);
 		skyLights[i].Enable();
 	}
 	PositionLights(camPos.x0z);
@@ -480,7 +492,7 @@ function OnInit(params)
 	Light1 = CVmLight();
 	//Light1.SetPosition(PosL);
 	Light1.SetAmbient(1, 1, 1);
-	Light1.Enable();	
+	//Light1.Enable();	
 
 	//Light2 = CVmLight();
 	//Light2.SetPosition([0,10,-2]);
@@ -497,9 +509,9 @@ function OnInit(params)
 	SetLocalDir();
 	//#endif
 	
-	furnitureMesh = CVmNewMesh("sceneData\\furniture.aam");
- 	furnitureObj  = CVmObj();
-    furnitureObj.LinkToMesh(furnitureMesh); 
+	//furnitureMesh = CVmNewMesh("sceneData\\furniture.aam");
+ 	//furnitureObj  = CVmObj();
+    //furnitureObj.LinkToMesh(furnitureMesh); 
 }
 
 function PositionLights(centre)
@@ -529,9 +541,10 @@ function OnFrame()
 	
 	
 	for (var i = 0; i < len(shapes); i++) {
-		if(curShape == i && shapes[i].__GetName() == "MESHSHAPE")
-			shapes[i].obj.DrawBoundingBox();
-		else if(curShape == i) glColor(.26,.71,.90);
+		if(curShape == i) {
+			glColor(.26,.71,.90);
+			if(shapes[i].__GetName() == "MESHSHAPE") shapes[i].obj.DrawBoundingBox();
+		}
 		shapes[i].DrawShape();
 		if(curShape == i) glColor(1,1,1);
 	}
@@ -545,7 +558,7 @@ function OnFrame()
 	skyDome.SetPosition(domeCentre);
 	PositionLights(domeCentre);
 	skyDome.Draw();
-	furnitureObj .Draw();
+	//furnitureObj .Draw();
 	SceneEnd();
 }
 
