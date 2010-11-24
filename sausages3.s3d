@@ -389,11 +389,14 @@ function MeshSelector::MeshSelector() {
 	fileNames[0] = "monkey.aam";
 	fileNames[1] = "sphere.aam";
 	fileNames[2] = "cone.aam";
+	//fileNames[3] = "skewedHouse.AAM";
+	//fileNames[2] = "Fence.AAM";
+	
 	#endif
 
 	for(var i = 0; i < len(fileNames); i++) {
 		var mesh = CVmNewMesh(fileNames[i]);
-		mesh.Normalize(0.5);
+		mesh.Normalize(0.1);
 		
 		meshes[i] = CVmObj();
 		meshes[i].LinkToMesh(mesh);
@@ -401,31 +404,36 @@ function MeshSelector::MeshSelector() {
 }
 function MeshSelector::Draw() {
 	
-	var centre = CameraGetPosition(); //+ headpos;
+	var centre = CameraGetPosition(); // + headpos;
 	
 	var d = 3;
 	var selectedMesh = -1;
 	var rads = rot;
+	var r = 0.35;
 	for (var i = 0; i < len(meshes); i++) {
-		meshes[i].SetPosition(centre.x + 2 * sin(rads), centre.y, centre.z - 2 * cos(rads));
-		meshes[i].draw();
-		
-		if (Abs(rads) < d) {
+		meshes[i].SetPosition(centre.x + r * sin(rads), centre.y, centre.z - r * cos(rads));
+		if (Abs(rads) < d) { //checks to see if this shape is selected
 			selectedMesh = i;
 		 	d = Abs(rads);
 		}
+		meshes[i].draw();
+		
 		
 		ConsoleText(0.1,0.03*i+0.03,Sprintf("i: %i, rads: %f, d: %f, selectedMesh: %i", i, rads, d, selectedMesh));
-		rads += 0.3;
+		rads += 0.4; //distance between shapes
 	}
-	
-	if (selectedMesh > -1) selected = fileNames[selectedMesh];
-	else selected = 0;
+	if (selectedMesh > -1) {
+		meshes[selectedMesh].DrawBoundingBox(VR_WIREFRAME | VR_NOSHADING);
+		selected = fileNames[selectedMesh];
+	} else selected = 0;
 }
 function OnDownload()
 {
 	// TODO: download your resources here
-	// E.g.: FileDownload("resource.ext");
+	#ifdef CAVE
+	FileDownload("sceneData.zip");
+	FileDownload("shapes.zip");
+	#endif
 }
 
 
@@ -458,13 +466,13 @@ function OnInit(params)
 	
 	/* initialize light */
 	Light0 = CVmLight();
-	Light0.SetPosition([0.0, 10.0, 10.0]);
-	Light0.SetDiffuse(1, 1, 1);
+	Light0.SetPosition([0.0, 2, -90]);
+	Light0.SetAmbient(1, 1, 1);
 	Light0.Enable();
 	
 	Light1 = CVmLight();
-	Light1.SetPosition(PosL);
-	Light1.SetDiffuse(1, 1, 1);
+	//Light1.SetPosition(PosL);
+	Light1.SetAmbient(.75, .75, .75);
 	Light1.Enable();	
 
 	//Light2 = CVmLight();
@@ -474,9 +482,13 @@ function OnInit(params)
 	
 	for (var i = 0; i < 16; i++) kb[i] = b[i] = 0;
 	
+	//#ifndef CAVE
 	SetLocalDir("\\shapes\\");
+	//#endif
 	mSelect = MeshSelector();
+	//#ifndef CAVE
 	SetLocalDir();
+	//#endif
 	
 	furnitureMesh = CVmNewMesh("sceneData\\furniture.aam");
  	furnitureObj  = CVmObj();
@@ -488,7 +500,6 @@ function OnFrame()
 {
 	/* manage camera */
 	joystickMove();
-	CameraMoveMouse();
 	
 	SetClearColor(0,0,0);
 	SceneBegin();
@@ -506,7 +517,9 @@ function OnFrame()
 	
 	
 	for (var i = 0; i < len(shapes); i++) {
-		if(curShape == i) glColor(.26,.71,.90);
+		if(curShape == i && shapes[i].__GetName() == "MESHSHAPE")
+			shapes[i].obj.DrawBoundingBox();
+		else if(curShape == i) glColor(.26,.71,.90);
 		shapes[i].DrawShape();
 		if(curShape == i) glColor(1,1,1);
 	}
@@ -647,7 +660,7 @@ function joystickMove()
 		curShape = len(shapes) - 1;
 	}	
 		
-	ConsoleText(0,0.98,Sprintf("%s | %s", joyMode == LOOK ? "look" : "move", opMode == TRANSLATE_MODE ? "translate" : (opMode == SCALE_MODE ? "scale" : "object")));	
+	ConsoleText(0,0.90,Sprintf("%s | %s", joyMode == LOOK ? "look" : "move", opMode == TRANSLATE_MODE ? "translate" : (opMode == SCALE_MODE ? "scale" : "object")));	
 	lastButtons = buts;
 	
 	//camera translation
@@ -678,9 +691,19 @@ function joystickMove()
 	}
 	
 	//smallShape.pos = CameraPos + wandpos;
-	smallShape.pos = CameraPos + headpos + VectorRotate(-worldRotation, 0, 1, 0, wandpos - headpos, false);
+	smallShape.pos = CameraPos + headpos + VectorRotate(-worldRotation, 0, 1, 0, wandpos - headpos, false) + [0,0.1,0];
 	smallShape.rot = wandrot;
-	smallShape.rot.x += worldRotation;
+	//var vec = Vector(3);
+	//vec.z = -1;
+	//vec = VectorRotate(wandRot.x,1,0,0,vec,false);
+	//vec = VectorRotate(wandRot.y - worldRotation,0,1,0,vec,false);
+	//vec = VectorRotate(wandRot.z,0,0,1,vec,false);
+	
+	//var ang = vec * [0,0,-1];
+	//var cross = vec ^ [0,0,-1];
+	//smallShape.rot = VectorRotate(ang, cross, smallShape.rot, false);
+	smallShape.rot.y -= worldRotation;
+	//smallShape.rot.x -= worldRotation;
 	
 	static var PrecSphereX = 0, PrecSphereY = 0;
 	var TR_SENSITIVITY = 0.01;
@@ -703,7 +726,7 @@ function joystickMove()
 		//shapes[curShape] = MeshShape(shapes[curShape]);
 		//shapes[curShape].SetMesh("meshes//tree1.aam", true);
 		mSelect.visible = true;
-		mSelect.rot = wandrot.y / 180 * PI;
+		mSelect.rot = -wandrot.y / 180 * PI;
 	}
 	PrecSphereX = wandRot.x;
 	PrecSphereY = wandRot.y;
@@ -800,65 +823,4 @@ function DrawGrid(col, size)
 	
 	/* polite restoration of previous OpenGL status */
 	glPopAttrib();
-}
-
-// Camera manager (using mouse)
-function CameraMoveMouse()
-{
-	static var InMouseR = false, InMouseL = false;				
-	static var PrecX = 0, PrecY = 0;			
-	// Change these values to modify the mouse sensitivity
-	var TR_SENSITIVITY  = 0.0001 ;//* SceneScale;
-	var ROT_SENSITIVITY = 0.01;
-	// Mouse manager
-	if(Mouse.ButtonL && !Mouse.ButtonR)
-	{
-		//====  Left Button: Camera rotation  ====//
-		if (InMouseL)
-		{			
-			CameraRotate(( Mouse.X-PrecX)*ROT_SENSITIVITY,0,1,0);
-			CameraRotateABS((Mouse.Y-PrecY)*ROT_SENSITIVITY,1,0,0);		
-		}
-		else
-		{
-			PrecX = Mouse.X;
-			PrecY = Mouse.Y;
-		}
-		InMouseL = true;
-		InMouseR = false;
-	}
-	else
-	if(Mouse.ButtonR)
-	{
-	
-		//====  Right Button: Camera translation  ====//
-		if (InMouseR)
-		{
-			var CameraMatrix = CameraGetMatrix();
-			var CameraPos = CameraGetPosition();
-			if (!Mouse.ButtonL) 
-			//====  Translation on X and Z axis ====//
-				CameraPos += CameraGetZAxis() * (Mouse.y-PrecY)*TR_SENSITIVITY + CameraGetXAxis() * (Mouse.X- PrecX)*TR_SENSITIVITY;
-			else
-			//====  Right + Left Button: Translation on Y axis ====//
-				CameraPos -= CameraGetYAxis() * (Mouse.y-PrecY)*TR_SENSITIVITY;
-
-			CameraSetPosition(CameraPos);		
-		}
-		else
-		{
-			PrecX = Mouse.X;
-			PrecY = Mouse.Y;
-		}
-		InMouseR = true;
-		InMouseL = false;
-	}	
-	else
-	{
-		InMouseR = false;
-		InMouseL = false;
-	}
-	/*
-	var CameraPos = CameraGetPosition();
-	var CameraDir = CameraGetDirection();*/
 }
