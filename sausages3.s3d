@@ -45,7 +45,7 @@ var kb = Array(16);
 var headpos = [1.5,1.8,1.5];
 
 /* Light globals */
-var Light0;
+var skyLights;
 var Light1;
 var Light2;
 var PosL = [0.0, 10.0, 10.0];	// default light position
@@ -58,6 +58,7 @@ function DrawGrid(col, size);
 function joystickMove();
 function DrawLine(visible);
 function PickShape();
+function PositionLights(centre);
 
 class Shape 
 {
@@ -447,6 +448,8 @@ function OnInit(params)
 		
 	shapes = Array(2);
 	
+	glEnable(GL_NORMALIZE);
+	
 	shapes[0] = Shape();
 	shapes[0].pos = [0,1,2.5];
 	shapes[1] = Shape();
@@ -461,18 +464,22 @@ function OnInit(params)
 	var mesh = CVmNewMesh("skyDome.aam");
 	skyDome = CVmObj();
 	skyDome.LinkToMesh(mesh);
-	skyDome.SetScale([30,10,30]);
-	skyDome.SetPosition(camPos);
+	skyDome.SetScale([100,100,100]);
+	skyDome.SetPosition(camPos.x0z);
 	
 	/* initialize light */
-	Light0 = CVmLight();
-	Light0.SetPosition([0.0, 2, -90]);
-	Light0.SetAmbient(1, 1, 1);
-	Light0.Enable();
+	skyLights = Array(6);
+	for(var i = 0; i < 6; i++) {
+		outputln(i);
+		skyLights[i] = CVmLight();
+		skyLights[i].SetDiffuse(10, 10, 10);
+		skyLights[i].Enable();
+	}
+	PositionLights(camPos.x0z);
 	
 	Light1 = CVmLight();
 	//Light1.SetPosition(PosL);
-	Light1.SetAmbient(.75, .75, .75);
+	Light1.SetAmbient(1, 1, 1);
 	Light1.Enable();	
 
 	//Light2 = CVmLight();
@@ -495,7 +502,12 @@ function OnInit(params)
     furnitureObj.LinkToMesh(furnitureMesh); 
 }
 
-
+function PositionLights(centre)
+{
+	for(var i = 0; i < 6; i++) {
+		skyLights[i].SetPosition(centre.x + 80 * sin(i*1.047), 40, centre.z - 80 * cos(i*1.047));
+	}	
+}
 function OnFrame()
 {
 	/* manage camera */
@@ -531,6 +543,7 @@ function OnFrame()
 	var domeCentre = CameraPos;
 	domeCentre.y = 0;
 	skyDome.SetPosition(domeCentre);
+	PositionLights(domeCentre);
 	skyDome.Draw();
 	furnitureObj .Draw();
 	SceneEnd();
