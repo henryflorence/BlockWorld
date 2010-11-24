@@ -15,6 +15,7 @@ SET SCENE_FAR  = 1000;
 #define TEXTURE_MODE 2
 #define NUM_MODES 3
 
+//#define DEBUG
 //#define HIGHPOLY
 // TODO: put your global variables here
 //#define CAVE
@@ -49,6 +50,7 @@ var skyLights;
 var Light1;
 var Light2;
 var PosL = [0.0, 10.0, 10.0];	// default light position
+var groundTexture;
 
 var mSelect;
 /* Function declarations */
@@ -59,6 +61,7 @@ function joystickMove();
 function DrawLine(visible);
 function PickShape();
 function PositionLights(centre);
+function DrawGroundPlane(centre);
 
 class Shape 
 {
@@ -68,6 +71,7 @@ class Shape
 	var bounds;
 	var corners;
 	var yStartpos;
+	var pauseCount;
 	
 	ResetShape();
 	SetShape();
@@ -139,6 +143,7 @@ function Shape::Shape()
 	rot = [0,0,0];
 	bounds = [1,1,1];
 	corners = Array(8);
+	pauseCount = 0;
 	
 	for(var i = 0; i < 8; i++)
 		corners[i] = Vector(3);
@@ -192,8 +197,8 @@ function MeshShape::DrawShape()
 }
 function Shape::DrawShape()
 {
-	glPushAttrib(GL_LIGHTING_BIT | GL_LINE_BIT | GL_CURRENT_BIT);
-	glDisable(GL_LIGHTING);
+	//glPushAttrib(GL_LIGHTING_BIT | GL_LINE_BIT | GL_CURRENT_BIT);
+	//glDisable(GL_LIGHTING);
 	//glLoadIdentity();
 	
 	glPushMatrix();
@@ -209,7 +214,7 @@ function Shape::DrawShape()
 	glEnd();
 	
 	glPopMatrix();
-	glPopAttrib();	
+	//glPopAttrib();	
 }
 
 function Shape::CalcBounds(scale) {
@@ -306,8 +311,8 @@ function Shape::CheckValues( bound, lt, olt, ort, bt, tp, obt, otp, ft, bk, oft,
 function shape::Gravity()
 {
 	static dS = 0;
-	if (b[5] == 1 && shapes[curShape] == this) return;
-	
+	if(pauseCount > 0) pauseCount--;
+	if ((b[5] == 1 && shapes[curShape] == this) || pauseCount > 0) return;
 	//v = sqrt(2a * delta S)
 	if(dS == 0) dS = 0.1;
 	
@@ -482,17 +487,18 @@ function OnInit(params)
 	/* initialize light */
 	skyLights = Array(6);
 	for(var i = 0; i < 6; i++) {
-		outputln(i);
 		skyLights[i] = CVmLight();
 		skyLights[i].SetDiffuse(.5, .5, .5);
 		skyLights[i].Enable();
 	}
 	PositionLights(camPos.x0z);
+	groundTexture = CVmTexture("ground.jpg");
+	
 	
 	Light1 = CVmLight();
 	//Light1.SetPosition(PosL);
 	Light1.SetAmbient(1, 1, 1);
-	//Light1.Enable();	
+	Light1.Enable();	
 
 	//Light2 = CVmLight();
 	//Light2.SetPosition([0,10,-2]);
@@ -516,9 +522,38 @@ function OnInit(params)
 
 function PositionLights(centre)
 {
-	for(var i = 0; i < 6; i++) {
+	for(var i = 0; i < 6; i++)
 		skyLights[i].SetPosition(centre.x + 80 * sin(i*1.047), 40, centre.z - 80 * cos(i*1.047));
-	}	
+}
+function DrawGroundPlane(centre)
+{
+	glPushMatrix();
+	glColor(GL_RED);
+	
+	SetActiveTexture(groundTexture);
+	glTexEnvf( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE );
+	// when texture area is small, bilinear filter the closest mipmap
+	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                 GL_LINEAR_MIPMAP_NEAREST );
+	// when texture area is large, bilinear filter the original
+	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+
+	// the texture wraps over at the edges (repeat)
+	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT );
+	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT );
+	
+	glTranslate(centre);
+	glBegin(GL_QUADS);
+	glTexCoord(200.0+centre.x,centre.z); glVertex(100,0,-100);
+	glTexCoord(centre.x,centre.z); glVertex(-100,0,-100);
+	glTexCoord(centre.x,200.0+centre.z); glVertex(-100,0,100);
+	glTexCoord(200.0+centre.x,200.0+centre.z); glVertex(100,0,100);
+	glEnd();
+	glTranslate(-centre);
+	
+	glColor(1,1,1);
+	glPopMatrix();
+	
 }
 function OnFrame()
 {
@@ -534,7 +569,7 @@ function OnFrame()
 	glRotate(worldRotation,0,1,0);
 	glTranslate(-CameraPos);
 	
-	DrawGrid([0.5, 0.5, 0.5], 10);
+	//DrawGrid([0.5, 0.5, 0.5], 10);
 	
 	DrawLine(!mSelect.visible); //b[5] == 1);
 	if(b[5] == 0) PickShape();
@@ -553,11 +588,12 @@ function OnFrame()
 	smallShape.DrawShape();
 	
 	if (mSelect.visible) mSelect.Draw();
-	var domeCentre = CameraPos;
-	domeCentre.y = 0;
-	skyDome.SetPosition(domeCentre);
-	PositionLights(domeCentre);
+	
+	PositionLights(CameraPos.x0z);
+	skyDome.SetPosition(CameraPos.x0z);
 	skyDome.Draw();
+	
+	DrawGroundPlane(CameraPos.x0z);
 	//furnitureObj .Draw();
 	SceneEnd();
 }
@@ -598,7 +634,9 @@ function PickShape(){
 			curShape = i;
 			closest = dis;
 		}
+		#ifdef DEBUG
 		ConsoleText(0.1,0.03*i,Sprintf("distance: %.2f - %i", shapes[i].DistanceToLine(smallShape.pos, endVert), curShape));
+		#endif
 	}
 }
 function DownloadReady(RequestID)
@@ -667,6 +705,7 @@ function joystickMove()
 	var CameraMatrix = CameraGetMatrix();
 	var CameraPos = CameraGetPosition();
 	
+	#ifdef DEBUG
 	ConsoleColor(1,1,1,1);
 	ConsoleText(0.1,0.15,Sprintf("head pos: %.2f, %.2f, %.2f", headpos.x, headpos.y, headpos.z));
 	ConsoleText(0.1,0.18,Sprintf("head rot: %.2f, %.2f, %.2f", headrot.x, headrot.y, headrot.z));
@@ -674,6 +713,7 @@ function joystickMove()
 	ConsoleText(0.1,0.24,Sprintf("wand rot: %.2f, %.2f, %.2f", wandrot.x, wandrot.y, wandrot.z));
 	ConsoleText(0.1,0.27,Sprintf("wand valuator: %.2f, %.2f", joystick.x, joystick.y));
 	ConsoleText(0.1,0.30,Sprintf("buttons: %i, red: %i, yellow: %i, green: %i, blue: %i, joy butt: %i, trigger: %i", buts, b[0], b[1], b[2], b[3], b[4], b[5]));
+	#endif
 	
 	if (b[0]==1 && lastButtons%2==0) 
 		joyMode = (joyMode == LOOK ? MOVE : LOOK);
@@ -684,7 +724,10 @@ function joystickMove()
 	if (b[2]==1 && lastButtons/4%2==0 && b[5] == 0) {
 		aadd(shapes, Shape());
 		curShape = len(shapes) - 1;
-	}	
+	}
+	
+	//object just released?
+	if (b[5]==0 && lastButtons/32%2==1) shapes[curShape].pauseCount = 20;
 		
 	ConsoleText(0,0.90,Sprintf("%s | %s", joyMode == LOOK ? "look" : "move", opMode == TRANSLATE_MODE ? "translate" : (opMode == SCALE_MODE ? "scale" : "object")));	
 	lastButtons = buts;
@@ -716,20 +759,9 @@ function joystickMove()
 		CameraSetPosition(CameraPos);
 	}
 	
-	//smallShape.pos = CameraPos + wandpos;
 	smallShape.pos = CameraPos + headpos + VectorRotate(-worldRotation, 0, 1, 0, wandpos - headpos, false) + [0,0.1,0];
 	smallShape.rot = wandrot;
-	//var vec = Vector(3);
-	//vec.z = -1;
-	//vec = VectorRotate(wandRot.x,1,0,0,vec,false);
-	//vec = VectorRotate(wandRot.y - worldRotation,0,1,0,vec,false);
-	//vec = VectorRotate(wandRot.z,0,0,1,vec,false);
-	
-	//var ang = vec * [0,0,-1];
-	//var cross = vec ^ [0,0,-1];
-	//smallShape.rot = VectorRotate(ang, cross, smallShape.rot, false);
 	smallShape.rot.y -= worldRotation;
-	//smallShape.rot.x -= worldRotation;
 	
 	static var PrecSphereX = 0, PrecSphereY = 0;
 	var TR_SENSITIVITY = 0.01;
