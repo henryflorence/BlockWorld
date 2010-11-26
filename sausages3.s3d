@@ -20,7 +20,7 @@ SET SCENE_FAR  = 1000;
 #define DEBUG
 //#define HIGHPOLY
 // TODO: put your global variables here
-#define CAVE
+//#define CAVE
 
 /* Camera globals */
 //#ifdef CAVE
@@ -51,6 +51,7 @@ var headpos = [1.5,1.8,1.5];
 //mode icon
 var iconRads = 0;
 var iconObj;
+var iconTumpleAxis;
 
 /* Light globals */
 var skyLights;
@@ -70,6 +71,7 @@ function PickShape();
 function PositionLights(centre);
 function DrawGroundPlane(centre);
 function LoadIcon();
+function TumpleIcon();
 
 class Shape 
 {
@@ -540,6 +542,7 @@ function OnInit(params)
 	iconMesh.Normalize(0.05);
 	iconObj  = CVmObj();
     iconObj.LinkToMesh(iconMesh);
+    TumpleIcon();
 	//iconObj
 }
 
@@ -580,10 +583,11 @@ function DrawGroundPlane(centre)
 }
 function OnFrame()
 {
+	
 	/* manage camera */
+	CameraMoveMouse();
 	
 	SceneBegin();
-	joystickMove();
 	SetClearColor(1,1,1);
 	//SceneEnableFog(1,100,[0,0,0]);
 	glEnable(GL_NORMALIZE);
@@ -674,8 +678,70 @@ function DownloadReady(RequestID)
 function OnTimer()
 {
 	getNewKeyboardEvents();
+	joystickMove();
 	foreach (var shape in shapes) shape.Gravity();
 	iconRads += 0.01;
+	iconObj.Rotate(0.3,iconTumpleAxis);
+}
+// Camera manager (using mouse)
+function CameraMoveMouse()
+{
+	static var InMouseR = false, InMouseL = false;				
+	static var PrecX = 0, PrecY = 0;			
+	// Change these values to modify the mouse sensitivity
+	var TR_SENSITIVITY  = 0.0001 ;//* SceneScale;
+	var ROT_SENSITIVITY = 0.01;
+	// Mouse manager
+	if(Mouse.ButtonL && !Mouse.ButtonR)
+	{
+		//====  Left Button: Camera rotation  ====//
+		if (InMouseL)
+		{			
+			CameraRotate(( Mouse.X-PrecX)*ROT_SENSITIVITY,0,1,0);
+			CameraRotateABS((Mouse.Y-PrecY)*ROT_SENSITIVITY,1,0,0);		
+		}
+		else
+		{
+			PrecX = Mouse.X;
+			PrecY = Mouse.Y;
+		}
+		InMouseL = true;
+		InMouseR = false;
+	}
+	else
+	if(Mouse.ButtonR)
+	{
+	
+		//====  Right Button: Camera translation  ====//
+		if (InMouseR)
+		{
+			var CameraMatrix = CameraGetMatrix();
+			var CameraPos = CameraGetPosition();
+			if (!Mouse.ButtonL) 
+			//====  Translation on X and Z axis ====//
+				CameraPos += CameraGetZAxis() * (Mouse.y-PrecY)*TR_SENSITIVITY + CameraGetXAxis() * (Mouse.X- PrecX)*TR_SENSITIVITY;
+			else
+			//====  Right + Left Button: Translation on Y axis ====//
+				CameraPos -= CameraGetYAxis() * (Mouse.y-PrecY)*TR_SENSITIVITY;
+			
+			CameraSetPosition(CameraPos);		
+		}
+		else
+		{
+			PrecX = Mouse.X;
+			PrecY = Mouse.Y;
+		}
+		InMouseR = true;
+		InMouseL = false;
+	}	
+	else
+	{
+		InMouseR = false;
+		InMouseL = false;
+	}
+	/*
+	var CameraPos = CameraGetPosition();
+	var CameraDir = CameraGetDirection();*/
 }
 
 
@@ -856,6 +922,10 @@ function LoadIcon() {
 	}
 	iconMesh.Normalize(0.05);
     iconObj.LinkToMesh(iconMesh);
+    TumpleIcon();
+}
+function TumpleIcon() {
+	iconTumpleAxis = [Rand(1),Rand(1),Rand(1)];
 }
 function getNewKeyboardEvents()
 {
