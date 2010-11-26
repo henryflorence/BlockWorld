@@ -7,18 +7,20 @@ SET SCENE_FOV  = 60;
 SET SCENE_NEAR = 0.5;
 SET SCENE_FAR  = 1000;
 
+
 #define LOOK 1
 #define MOVE 2
 
 #define TRANSLATE_MODE 0
 #define SCALE_MODE 1 
 #define TEXTURE_MODE 2
-#define NUM_MODES 3
+#define ROTATE_MODE 3
+#define NUM_MODES 4
 
-//#define DEBUG
+#define DEBUG
 //#define HIGHPOLY
 // TODO: put your global variables here
-//#define CAVE
+#define CAVE
 
 /* Camera globals */
 //#ifdef CAVE
@@ -40,10 +42,15 @@ var skyDome;
 var furnitureObj;
 var furnitureMesh;
 var endVert = Vector(3);
+var startVert = Vector(3);
 var wandRot = [0,0,0];
 var b = Array(16);
 var kb = Array(16);
 var headpos = [1.5,1.8,1.5];
+
+//mode icon
+var iconRads = 0;
+var iconObj;
 
 /* Light globals */
 var skyLights;
@@ -62,6 +69,7 @@ function DrawLine(visible);
 function PickShape();
 function PositionLights(centre);
 function DrawGroundPlane(centre);
+function LoadIcon();
 
 class Shape 
 {
@@ -79,6 +87,7 @@ class Shape
 	DrawShape();
 	CalcBounds(scale);
 	CheckBounds();
+	FloorBounds();
 	CheckValues( bound, lt, olt, ort, bt, tp, obt, otp, ft, bk, oft, obk );
 	DistanceToLine(x1, x2);
 	Gravity();
@@ -115,16 +124,9 @@ function MeshShape::SetMesh(file, normalise)
 {
 	mesh = CVmNewMesh(file);
 	obj = CVmObj();
-	if(normalise) {
-		mesh.Normalize(2);
-		
-		//cannot manipulate properties of subclass properties directly!
-		var oldPos = this.GetPos();
-		oldPos.y = 1;	
-		this.SetPos(oldPos);
-	}
-	obj.LinkToMesh(mesh);
+	if(normalise) mesh.Normalize(2);
 	
+	mesh.CenterBoundingBox();
 	var ObjBounds = mesh.GetBoundingBox();
 	var newBounds = Vector(3);
 	newBounds.x = (ObjBounds[0] + ObjBounds[3]) / 2;
@@ -132,6 +134,14 @@ function MeshShape::SetMesh(file, normalise)
 	newBounds.z = (ObjBounds[2] + ObjBounds[5]) / 2;
 	
 	Shape::bounds = newBounds;
+	
+	if (normalise) {
+		//cannot manipulate properties of subclass properties directly!
+		var oldPos = this.GetPos();
+		oldPos.y = 1;	
+		this.SetPos(oldPos);
+	}
+	obj.LinkToMesh(mesh);
 }
 function Shape::Shape()
 {
@@ -217,6 +227,16 @@ function Shape::DrawShape()
 	//glPopAttrib();	
 }
 
+function Shape::FloorBounds() {
+	if(bounds.x < 0.001) bounds.x = 0.001;
+	else if(bounds.x > 100) bounds.x = 100;
+	
+	if(bounds.y < 0.001) bounds.y = 0.001;
+	else if(bounds.y > 100) bounds.y = 100;
+	
+	if(bounds.z < 0.001) bounds.z = 0.001;
+	else if(bounds.z > 100) bounds.z = 100;
+}
 function Shape::CalcBounds(scale) {
 	bounds.x = bounds.x * scale.x;
 	bounds.y = bounds.y * scale.y;
@@ -229,7 +249,6 @@ function Shape::CalcBounds(scale) {
 	SetShape();
 }
 function Shape::CheckBounds() {
-
 	//ground plane
 	//if(GetBottom() < 0)  pos.y -= pos.y - bounds.y; 
 	
@@ -384,8 +403,8 @@ function MeshSelector::MeshSelector() {
 	rot = 0;
 	visible = false;
 	
-	meshes = Array(3);
-	fileNames = Array(3);
+	meshes = Array(4);
+	fileNames = Array(4);
 	
 	#ifdef HIGHPOLY
 	fileNames[0] = "tree1.aam";
@@ -395,6 +414,7 @@ function MeshSelector::MeshSelector() {
 	fileNames[0] = "monkey.aam";
 	fileNames[1] = "sphere.aam";
 	fileNames[2] = "cone.aam";
+	fileNames[3] = "fountain1.aam";
 	//fileNames[3] = "skewedHouse.AAM";
 	//fileNames[2] = "Fence.AAM";
 	
@@ -407,6 +427,7 @@ function MeshSelector::MeshSelector() {
 		#else
 		mesh.Normalize(0.5);
 		#endif
+		mesh.CenterBoundingBox();
 		meshes[i] = CVmObj();
 		meshes[i].LinkToMesh(mesh);
 	}
@@ -448,10 +469,10 @@ function MeshSelector::Draw() {
 function OnDownload()
 {
 	// TODO: download your resources here
-	#ifdef CAVE
-	FileDownload("sceneData.zip");
-	FileDownload("shapes.zip");
-	#endif
+	//#ifdef CAVE
+	//FileDownload("sceneData.zip");
+	//FileDownload("shapes.zip");
+	//#endif
 }
 
 
@@ -475,7 +496,7 @@ function OnInit(params)
 	//smallShape = Shape();
 	smallShape = MeshShape();
 	smallShape.SetMesh("pointer.aam", false);
-	smallShape.pos = [0,1,0];
+	smallShape.pos = startVert = [0,1,0];
 	smallShape.CalcBounds([0.1,0.1,0.1]);
 	
 	var mesh = CVmNewMesh("skyDome.aam");
@@ -515,15 +536,17 @@ function OnInit(params)
 	SetLocalDir();
 	//#endif
 	
-	//furnitureMesh = CVmNewMesh("sceneData\\furniture.aam");
- 	//furnitureObj  = CVmObj();
-    //furnitureObj.LinkToMesh(furnitureMesh); 
+	var iconMesh = CVmNewMesh("icons\\translate.aam");
+	iconMesh.Normalize(0.05);
+	iconObj  = CVmObj();
+    iconObj.LinkToMesh(iconMesh);
+	//iconObj
 }
 
 function PositionLights(centre)
 {
 	for(var i = 0; i < 6; i++)
-		skyLights[i].SetPosition(centre.x + 80 * sin(i*1.047), 40, centre.z - 80 * cos(i*1.047));
+		skyLights[i].SetPosition(centre.x + 80 * sin(i*1.047), 30, centre.z - 80 * cos(i*1.047));
 }
 function DrawGroundPlane(centre)
 {
@@ -558,12 +581,17 @@ function DrawGroundPlane(centre)
 function OnFrame()
 {
 	/* manage camera */
-	joystickMove();
 	
-	SetClearColor(0,0,0);
 	SceneBegin();
-	
+	joystickMove();
+	SetClearColor(1,1,1);
+	//SceneEnableFog(1,100,[0,0,0]);
+	glEnable(GL_NORMALIZE);
 
+	smallShape.DrawShape();
+	iconObj.SetPosition(smallShape.pos + [0.04 * sin(iconRads),0.05,0.04 * cos(iconRads)]);
+	iconObj.Draw();
+	
 	var CameraPos = CameraGetPosition() + headpos;
 	glTranslate(CameraPos);
 	glRotate(worldRotation,0,1,0);
@@ -584,9 +612,6 @@ function OnFrame()
 		if(curShape == i) glColor(1,1,1);
 	}
 	
-	
-	smallShape.DrawShape();
-	
 	if (mSelect.visible) mSelect.Draw();
 	
 	PositionLights(CameraPos.x0z);
@@ -604,11 +629,11 @@ function DrawLine(visible)
 	vec.z = -100;
 	vec = VectorRotate(wandRot.x,1,0,0,vec,false);
 	vec = VectorRotate(wandRot.y - worldRotation,0,1,0,vec,false);
-	vec = VectorRotate(wandRot.z,0,0,1,vec,false);
+	//vec = VectorRotate(wandRot.z,0,0,1,vec,false);
 	
-	endVert.x = smallShape.pos.x + vec.x;
-	endVert.y = smallShape.pos.y + vec.y;
-	endVert.z = smallShape.pos.z + vec.z;
+	endVert.x = startVert.x + vec.x;
+	endVert.y = startVert.y + vec.y;
+	endVert.z = startVert.z + vec.z;
 	
 	if(!visible) return;
 	glPushAttrib(GL_LIGHTING_BIT | GL_LINE_BIT | GL_CURRENT_BIT);
@@ -619,7 +644,7 @@ function DrawLine(visible)
 	glEnable (GL_LINE_STIPPLE);
 	glLineStipple (1, 0x00FF);
 	glBegin(GL_LINES);
-		glVertex(smallShape.pos);
+		glVertex(startVert);
 		glVertex(endVert);
 	glEnd();
 	glDisable (GL_LINE_STIPPLE);
@@ -629,7 +654,7 @@ function PickShape(){
 	curShape = -1;
 	var closest = 1000;
 	for (var i = 0; i < len(shapes); i++) {
-		var dis = shapes[i].DistanceToLine(smallShape.pos, endVert);
+		var dis = shapes[i].DistanceToLine(startVert, endVert);
 		if(dis < closest) {
 			curShape = i;
 			closest = dis;
@@ -650,6 +675,7 @@ function OnTimer()
 {
 	getNewKeyboardEvents();
 	foreach (var shape in shapes) shape.Gravity();
+	iconRads += 0.01;
 }
 
 
@@ -718,8 +744,12 @@ function joystickMove()
 	if (b[0]==1 && lastButtons%2==0) 
 		joyMode = (joyMode == LOOK ? MOVE : LOOK);
 	
+	var oldMode = opMode;
 	if (b[1]==1 && lastButtons/2%2==0 && b[5] == 0)
 		opMode = (opMode + 1) % NUM_MODES;
+	
+	//if icon changed load new icon
+	if(oldMode != opMode) LoadIcon();
 	
 	if (b[2]==1 && lastButtons/4%2==0 && b[5] == 0) {
 		aadd(shapes, Shape());
@@ -759,32 +789,39 @@ function joystickMove()
 		CameraSetPosition(CameraPos);
 	}
 	
-	smallShape.pos = CameraPos + headpos + VectorRotate(-worldRotation, 0, 1, 0, wandpos - headpos, false) + [0,0.1,0];
+	startVert = CameraPos + headpos + VectorRotate(-worldRotation, 0, 1, 0, wandpos - headpos, false);
+	smallShape.pos = CameraPos + wandpos; //headpos + VectorRotate(-worldRotation, 0, 1, 0, wandpos - headpos, false) + [0,0.1,0];
 	smallShape.rot = wandrot;
-	smallShape.rot.y -= worldRotation;
+	//smallShape.rot.y -= worldRotation;
+	//smallShape.rot.x -= worldRotation;
 	
 	static var PrecSphereX = 0, PrecSphereY = 0;
 	var TR_SENSITIVITY = 0.01;
 	//translate
 	mSelect.preVisible = mSelect.visible;
 	mSelect.visible = false;
-	if(b[5]==1 && curShape > -1 && opMode < TEXTURE_MODE) {
+	if(b[5]==1 && curShape > -1 && opMode < NUM_MODES) {
 		var dX = WandRot.x - PrecSphereX;
 		var dY = WandRot.y - PrecSphereY;			
 
 		if(opMode == TRANSLATE_MODE) {
+			//OutputLn(Sprintf("WandRot.x: %i",WandRot.x));
 			var dVec = shapes[curShape].pos - (CameraPos + headpos); //vector from user head to shape
+			dVec = VectorRotate (-worldRotation, 0,1,0, dVec, false);
 			dVec = VectorRotate (dY, 0,1,0, dVec, false);
 			dVec = VectorRotate (dX, 1,0,0, dVec, false);
+			dVec = VectorRotate (worldRotation, 0,1,0, dVec, false);
 			shapes[curShape].pos = (CameraPos + headpos) + dVec;
 		} else if (opMode == SCALE_MODE) {		
 			shapes[curShape].bounds *= dX / 10 + 1;
-		}	
-	} else if (b[5]==1 && opMode == TEXTURE_MODE && curShape > -1) {
-		//shapes[curShape] = MeshShape(shapes[curShape]);
-		//shapes[curShape].SetMesh("meshes//tree1.aam", true);
-		mSelect.visible = true;
-		mSelect.rot = -wandrot.y / 180 * PI;
+			shapes[curShape].FloorBounds();
+		} else if (opMode == ROTATE_MODE) {
+			shapes[curShape].rot.y += dY;
+		} else if (b[5]==1 && opMode == TEXTURE_MODE && curShape > -1) {
+			//OutputLN("mesh Select");
+			mSelect.visible = true;
+			mSelect.rot = -wandrot.y / 180 * PI;
+		}
 	}
 	PrecSphereX = wandRot.x;
 	PrecSphereY = wandRot.y;
@@ -793,11 +830,33 @@ function joystickMove()
 		if (mSelect.preVisible && !mSelect.Visible) {
 			OutputLN(mSelect.selected);
 			SetLocalDir("\\shapes\\");
+			var pos = shapes[curShape].pos;
 			shapes[curShape] = MeshShape(shapes[curShape]);
-			shapes[curShape].SetMesh(mSelect.selected, true);	
+			shapes[curShape].SetMesh(mSelect.selected, true);
+			shapes[curShape].pos = pos;
 		}
 	}
-}	
+}
+function LoadIcon() {
+	SetLocalDir();
+	var iconMesh;
+	switch(opMode) {
+		case TRANSLATE_MODE:
+			iconMesh = CVmNewMesh("icons\\translate.aam");
+			break;
+		case ROTATE_MODE:
+			iconMesh = CVmNewMesh("icons\\rotate.aam");
+			break;
+		case TEXTURE_MODE:
+			iconMesh = CVmNewMesh("icons\\object.aam");
+			break;
+		case SCALE_MODE:
+			iconMesh = CVmNewMesh("icons\\scale.aam");
+			break;
+	}
+	iconMesh.Normalize(0.05);
+    iconObj.LinkToMesh(iconMesh);
+}
 function getNewKeyboardEvents()
 {
 	var key = keyboard();
