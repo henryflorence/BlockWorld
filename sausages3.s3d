@@ -27,6 +27,8 @@ SET SCENE_FAR  = 1000;
 //#ifdef CAVE
 var CamPos = [0.0, 1.1, 0.0]; 	// camera position
 
+/* Timer/Frame counters */
+var timerCount = 0;
 
 var shapes;
 var curShape = 0;
@@ -232,13 +234,13 @@ function Shape::DrawShape()
 
 function Shape::FloorBounds() {
 	if(bounds.x < 0.001) bounds.x = 0.001;
-	else if(bounds.x > 100) bounds.x = 100;
+	else if(bounds.x > 10) bounds.x = 10;
 	
 	if(bounds.y < 0.001) bounds.y = 0.001;
-	else if(bounds.y > 100) bounds.y = 100;
+	else if(bounds.y > 10) bounds.y = 10;
 	
 	if(bounds.z < 0.001) bounds.z = 0.001;
-	else if(bounds.z > 100) bounds.z = 100;
+	else if(bounds.z > 10) bounds.z = 10;
 }
 function Shape::CalcBounds(scale) {
 	bounds.x = bounds.x * scale.x;
@@ -293,25 +295,41 @@ function Shape::CheckBounds() {
 	pos.x -= dP;
 	pos.y -= dP;
 	pos.z -= dP;
+
+	//FIX THIS, RUN 2nd PART JUST FOR SCALING	
+	if( opMode == SCALE_MODE && b[5]==1) {
+		if(GetLeft() < leftBound && GetRight() > rightBound) {
+			bounds.x = (rightBound - leftBound) / 2;
+			SetShape();
+		} else if(GetLeft() < leftBound) SetLeft(leftBound);
+		else if(GetRight() > rightBound) SetRight(rightBound);
+		
+		if(GetBottom() < bottomBound && GetTop() > topBound) {
+			bounds.y = (topBound - bottomBound) / 2;
+			SetShape();
+		} else if(GetBottom() < bottomBound) SetBottom(bottomBound);
+		else if(GetTop() > topBound) SetTop(topBound);
+		
+		if(GetFront() < frontBound && GetBack() > backBound) {
+			bounds.z = (backBound - frontBound - 0.15) / 2;
+			SetShape();
+		} else if(GetFront() < frontBound) SetFront(frontBound);
+		else if(GetBack() > backBound) SetBack(backBound);
+	} else {
+		if(GetLeft() < leftBound) SetLeft(leftBound);
+		else if(GetRight() > rightBound) SetRight(rightBound);
+		
+		if(GetBottom() < bottomBound) SetBottom(bottomBound);
+		else if(GetTop() > topBound) SetTop(topBound);
+		
+		if(GetFront() < frontBound) SetFront(frontBound);
+		else if(GetBack() > backBound) SetBack(backBound);
+	}
 	
-	if(GetLeft() < leftBound && GetRight() > rightBound) {
-		bounds.x = (rightBound - leftBound) / 2;
-		SetShape();
-	} else if(GetLeft() < leftBound) SetLeft(leftBound);
-	else if(GetRight() > rightBound) SetRight(rightBound);
-	
-	
-	if(GetBottom() < bottomBound && GetTop() > topBound) {
-		bounds.y = (topBound - bottomBound) / 2;
-		SetShape();
-	} else if(GetBottom() < bottomBound) SetBottom(bottomBound);
-	else if(GetTop() > topBound) SetTop(topBound);
-	
-	if(GetFront() < frontBound && GetBack() > backBound) {
-		bounds.z = (backBound - frontBound - 0.15) / 2;
-		SetShape();
-	} else if(GetFront() < frontBound) SetFront(frontBound);
-	else if(GetBack() > backBound) SetBack(backBound);
+	//Prevent "squishing"
+	if(bounds.x==0)bounds.x=0.001;
+	if(bounds.y==0)bounds.y=0.001;
+	if(bounds.z==0)bounds.z=0.001;
 }
 function Shape::CheckValues( bound, lt, olt, ort, bt, tp, obt, otp, ft, bk, oft, obk )
 {
@@ -330,7 +348,7 @@ function Shape::CheckValues( bound, lt, olt, ort, bt, tp, obt, otp, ft, bk, oft,
 
 	return bound;
 }
-function shape::Gravity()
+function Shape::Gravity()
 {
 	static dS = 0;
 	if(pauseCount > 0) pauseCount--;
@@ -678,11 +696,20 @@ function DownloadReady(RequestID)
 
 function OnTimer()
 {
+	timerCount++;
 	getNewKeyboardEvents();
 	joystickMove();
 	foreach (var shape in shapes) shape.Gravity();
 	iconRads += 0.01;
 	iconObj.Rotate(0.3,iconTumpleAxis);
+	
+	#ifdef DEBUG
+	for(var i=0;i<len(shapes);i++){
+		var shape = shapes[i];
+		ConsoleText(0.1,0.40+i*0.03,Sprintf("shape#%i: %.2f, %.2f, %.2f", i, shape.GetPos().x, shape.GetPos().y, shape.GetPos().z));
+	}
+
+	#endif
 }
 // Camera manager (using mouse)
 function CameraMoveMouse()
