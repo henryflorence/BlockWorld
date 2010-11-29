@@ -595,7 +595,8 @@ function OnFrame()
 	smallShape.DrawShape();
 	iconObj.SetPosition(smallShape.pos + [0.04 * sin(iconRads),0.05,0.04 * cos(iconRads)]);
 	iconObj.Draw();
-	
+	if (mSelect.visible) mSelect.Draw();
+		
 	var CameraPos = CameraGetPosition() + headpos;
 	glTranslate(CameraPos);
 	glRotate(worldRotation,0,1,0);
@@ -615,8 +616,6 @@ function OnFrame()
 		shapes[i].DrawShape();
 		if(curShape == i) glColor(1,1,1);
 	}
-	
-	if (mSelect.visible) mSelect.Draw();
 	
 	PositionLights(CameraPos.x0z);
 	skyDome.SetPosition(CameraPos.x0z);
@@ -886,7 +885,7 @@ function joystickMove()
 		} else if (b[5]==1 && opMode == TEXTURE_MODE && curShape > -1) {
 			//OutputLN("mesh Select");
 			mSelect.visible = true;
-			mSelect.rot = -wandrot.y / 180 * PI;
+			mSelect.rot = -wandRot.y / 180 * PI;
 		}
 	}
 	PrecSphereX = wandRot.x;
