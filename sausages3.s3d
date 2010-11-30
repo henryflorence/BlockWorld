@@ -911,7 +911,7 @@ function joystickMove()
 			dVec = VectorRotate (-worldRotation, 0,1,0, dVec, false);
 			dVec = VectorRotate (dY, 0,1,0, dVec, false);
 			dVec = VectorRotate (dX, 1,0,0, dVec, false);
-			//dVec = VectorRotate (worldRotation, 0,1,0, dVec, false);
+			dVec = VectorRotate (worldRotation, 0,1,0, dVec, false);
 			shapes[curShape].pos = (CameraPos + wandpos) + dVec;
 		} else if (opMode == SCALE_MODE) {		
 			shapes[curShape].bounds *= dX / 10 + 1;
