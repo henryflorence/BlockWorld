@@ -430,8 +430,8 @@ function MeshSelector::MeshSelector() {
 	rot = 0;
 	visible = false;
 	
-	meshes = Array(4);
-	fileNames = Array(4);
+	meshes = Array(7);
+	fileNames = Array(7);
 	
 	#ifdef HIGHPOLY
 	fileNames[0] = "tree1.aam";
@@ -439,9 +439,12 @@ function MeshSelector::MeshSelector() {
 	fileNames[2] = "tree3.aam";
 	#else
 	fileNames[0] = "monkey.aam";
-	fileNames[1] = "sphere.aam";
-	fileNames[2] = "cone.aam";
+	fileNames[1] = "streetlamp1.aam";
+	fileNames[2] = "house2.aam";
 	fileNames[3] = "fountain1.aam";
+	fileNames[4] = "MarketStand.aam";
+	fileNames[5] = "tree_in_vase01.aam";
+	fileNames[6] = "TrafficLight.aam";
 	//fileNames[3] = "skewedHouse.AAM";
 	//fileNames[2] = "Fence.AAM";
 	
@@ -904,12 +907,12 @@ function joystickMove()
 
 		if(opMode == TRANSLATE_MODE) {
 			//OutputLn(Sprintf("WandRot.x: %i",WandRot.x));
-			var dVec = shapes[curShape].pos - (CameraPos + headpos); //vector from user head to shape
+			var dVec = shapes[curShape].pos - (CameraPos + wandpos); //vector from user head to shape
 			dVec = VectorRotate (-worldRotation, 0,1,0, dVec, false);
 			dVec = VectorRotate (dY, 0,1,0, dVec, false);
 			dVec = VectorRotate (dX, 1,0,0, dVec, false);
-			dVec = VectorRotate (worldRotation, 0,1,0, dVec, false);
-			shapes[curShape].pos = (CameraPos + headpos) + dVec;
+			//dVec = VectorRotate (worldRotation, 0,1,0, dVec, false);
+			shapes[curShape].pos = (CameraPos + wandpos) + dVec;
 		} else if (opMode == SCALE_MODE) {		
 			shapes[curShape].bounds *= dX / 10 + 1;
 			shapes[curShape].FloorBounds();
