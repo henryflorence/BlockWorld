@@ -256,7 +256,7 @@ function Shape::CheckBounds() {
 	//if(GetBottom() < 0)  pos.y -= pos.y - bounds.y; 
 	
 	var leftBound = -MAXBOUND;
-	var bottomBound = 1;
+	var bottomBound = 0;
 	var frontBound = -MAXBOUND;
 	
 	var rightBound = MAXBOUND;
@@ -347,8 +347,8 @@ function Shape::CheckValues( bound, lt, olt, ort, bt, tp, obt, otp, ft, bk, oft,
 function Shape::Gravity()
 {
 	static var dS = 0;
-	//if(pauseCount > 0) pauseCount--;
-	//if ((b[5] == 1 && shapes[curShape] == this) || pauseCount > 0) return;
+	if(pauseCount > 0) pauseCount--;
+	if ((b[5] == 1 && shapes[curShape] == this) || pauseCount > 0) return;
 	
 	//switch this off and watch them wobble!
 	pos.y -= 0.1;
@@ -490,7 +490,7 @@ function MeshSelector::Draw() {
 	if (selectedMesh > -1) {
 		glColor(.26,.71,.90);
 		meshes[selectedMesh].DrawBoundingBox();
-		selected = selectedMesh;
+		selected = fileNames[selectedMesh];
 	} else selected = 0;
 }
 function OnDownload()
