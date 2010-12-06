@@ -15,9 +15,10 @@ SET SCENE_FAR  = 1000;
 #define SCALE_MODE 1 
 #define TEXTURE_MODE 2
 #define ROTATE_MODE 3
-#define NUM_MODES 4
+#define DELETE_MODE 4
+#define NUM_MODES 5
 
-#define LOWPOLYWORLD
+//#define LOWPOLYWORLD
 #define DEBUG
 //#define HIGHPOLY
 // TODO: put your global variables here
@@ -417,6 +418,7 @@ function Shape::DistanceToLine(x1, x2) {
 
 class MeshSelector {
 	var meshes;
+	var names;
 	var fileNames;
 	var rot;
 	var visible;
@@ -429,23 +431,43 @@ class MeshSelector {
 function MeshSelector::MeshSelector() {
 	rot = 0;
 	visible = false;
-	
-	meshes = Array(4);
-	fileNames = Array(4);
-	
-	#ifdef HIGHPOLY
-	fileNames[0] = "tree1.aam";
-	fileNames[1] = "tree2.aam";
-	fileNames[2] = "tree3.aam";
-	#else
-	fileNames[0] = "monkey.aam";
-	fileNames[1] = "sphere.aam";
-	fileNames[2] = "cone.aam";
-	fileNames[3] = "fountain1.aam";
-	//fileNames[3] = "skewedHouse.AAM";
-	//fileNames[2] = "Fence.AAM";
-	
-	#endif
+
+	OutputLN("Shapes file exists:",FileExist("shapes.txt"));
+	if(FileExist("shapes.txt")){
+		var lines = LoadFile("shapes.txt");
+		meshes = Array(len(lines));
+		names = Array(0);
+		fileNames = Array(0);
+		OutputLN("len(lines):",len(lines));
+		foreach(var line in lines) {
+			var tokens = Split(line,",");
+			aadd(names,tokens[0]);
+			aadd(fileNames,tokens[1]);
+			OutputLN(line);
+		}
+		OutputLN("@");
+	} else {
+		meshes = Array(4);
+		names = Array(4);
+		fileNames = Array(4);
+		#ifdef HIGHPOLY
+		fileNames[0] = "tree1.aam";
+		fileNames[1] = "tree2.aam";
+		fileNames[2] = "tree3.aam";
+		#else
+		names[0] = "Monkey";
+		fileNames[0] = "monkey.aam";
+		names[1] = "Sphere";
+		fileNames[1] = "sphere.aam";
+		names[2] = "Cone";
+		fileNames[2] = "cone.aam";
+		names[3] = "Fountain";
+		fileNames[3] = "fountain1.aam";
+		//fileNames[3] = "skewedHouse.AAM";
+		//fileNames[2] = "Fence.AAM";
+		
+		#endif
+	}
 
 	for(var i = 0; i < len(fileNames); i++) {
 		var mesh = CVmNewMesh(fileNames[i]);
@@ -490,7 +512,7 @@ function MeshSelector::Draw() {
 	if (selectedMesh > -1) {
 		glColor(.26,.71,.90);
 		meshes[selectedMesh].DrawBoundingBox();
-		selected = selectedMesh;
+		selected = fileNames[selectedMesh];
 	} else selected = 0;
 }
 function OnDownload()
@@ -681,6 +703,7 @@ function DrawLine(visible)
 	glDisable (GL_LINE_STIPPLE);
 	
 }
+
 function PickShape(){
 	curShape = -1;
 	var closest = 1000;
@@ -695,6 +718,7 @@ function PickShape(){
 		#endif
 	}
 }
+
 function DownloadReady(RequestID)
 {
 	// TODO
@@ -855,10 +879,10 @@ function joystickMove()
 	}
 	
 	//object just released?
-	if (b[5]==0 && lastButtons/32%2==1) shapes[curShape].pauseCount = 20;
+	if (curShape>-1 && b[5]==0 && lastButtons/32%2==1) shapes[curShape].pauseCount = 20;
 		
 	ConsoleText(0,0.90,Sprintf("%s | %s", joyMode == LOOK ? "look" : "move", opMode == TRANSLATE_MODE ? "translate" : (opMode == SCALE_MODE ? "scale" : "object")));	
-	lastButtons = buts;
+	
 	
 	//camera translation
 	#ifdef CAVE
@@ -919,6 +943,12 @@ function joystickMove()
 			//OutputLN("mesh Select");
 			mSelect.visible = true;
 			mSelect.rot = -wandRot.y / 180 * PI;
+		} else if (curShape >-1 && opMode == DELETE_MODE) {
+			if (b[5]==1 && lastButtons/32%2==0) {
+				OutputLN("Deleting ",curShape);
+				adel(shapes,curShape);
+				curShape=-1;
+			}
 		}
 		if(curShape > -1) shapes[curShape].CheckBounds();
 	}
@@ -935,7 +965,9 @@ function joystickMove()
 			shapes[curShape].pos = pos;
 		}
 	}
+	lastButtons = buts;
 }
+
 function LoadIcon() {
 	SetLocalDir();
 	var iconMesh;
@@ -950,6 +982,9 @@ function LoadIcon() {
 			iconMesh = CVmNewMesh("icons\\object.aam");
 			break;
 		case SCALE_MODE:
+			iconMesh = CVmNewMesh("icons\\scale.aam");
+			break;
+		case DELETE_MODE:
 			iconMesh = CVmNewMesh("icons\\scale.aam");
 			break;
 	}
