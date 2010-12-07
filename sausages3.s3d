@@ -11,12 +11,13 @@ SET SCENE_FAR  = 1000;
 #define LOOK 1
 #define MOVE 2
 
-#define TRANSLATE_MODE 0
-#define SCALE_MODE 1 
-#define OBJECT_MODE 2
-#define ROTATE_MODE 3
-#define DELETE_MODE 4
-#define NUM_MODES 5
+#define TRANSLATE_MODE 	0
+#define SCALE_MODE 		1 
+#define ROTATE_MODE 	2
+#define OBJECT_MODE 	3
+#define TEXTURE_MODE 	4
+#define DELETE_MODE 	5
+#define NUM_MODES 		6
 
 #define LOWPOLYWORLD
 #define DEBUG
@@ -49,7 +50,7 @@ var wandRot = [0,0,0];
 var b = Array(16);
 var kb = Array(16);
 var headpos = [1.5,1.8,1.5];
-
+var TranslateConstrain = 0;
 //mode icon
 var iconRads = 0;
 var iconObj;
@@ -74,6 +75,7 @@ function PositionLights(centre);
 function DrawGroundPlane(centre);
 function LoadIcon();
 function TumpleIcon();
+function DrawConstrainLine();
 
 class Shape 
 {
@@ -250,6 +252,7 @@ function Shape::CalcBounds(scale) {
 	//bounds.y = bounds.y > MAXBOUND / 2 ? MAXBOUND / 2: bounds.y;
 	//bounds.z = bounds.z > MAXBOUND ? MAXBOUND : bounds.z;
 	
+	FloorBounds();
 	SetShape();
 }
 function Shape::CheckBounds() {
@@ -349,8 +352,8 @@ function Shape::Gravity()
 {
 	static var dS = 0;
 	if(pauseCount > 0) pauseCount--;
-	if ((b[5] == 1 && shapes[curShape] == this) || pauseCount > 0) return;
-	
+	if (curShape > -1 &&((b[5] == 1 && shapes[curShape] == this) || pauseCount > 0)) return;
+
 	//switch this off and watch them wobble!
 	pos.y -= 0.1;
 	var bottomBound = 0;
@@ -658,6 +661,7 @@ function OnFrame()
 	
 	DrawLine(!mSelect.visible); //b[5] == 1);
 	if(b[5] == 0) PickShape();
+	if(TranslateConstrain > 0) DrawConstrainLine(); 
 	
 	glColor(1,0,0);
 	for (var i = 0; i < len(shapes); i++) {
@@ -678,10 +682,32 @@ function OnFrame()
 	#else
 	DrawGrid([0.5, 0.5, 0.5], 10);
 	#endif
-	//furnitureObj .Draw();
+	
 	SceneEnd();
 }
+function DrawConstrainLine()
+{
+	if(curShape < 0 || TranslateConstrain == 0) return;
+	var startVert = shapes[curShape].pos.xyz;
+	var endVert = shapes[curShape].pos.xyz;
 
+	startVert[TranslateConstrain - 1] = -100;
+	endVert[TranslateConstrain - 1] = 100;
+
+	glPushAttrib(GL_LIGHTING_BIT | GL_LINE_BIT | GL_CURRENT_BIT);
+	
+	glColor(1,1,1);
+	glLineWidth(1);
+	glDisable(GL_LIGHTING);
+	
+	glEnable (GL_LINE_STIPPLE);
+	glLineStipple (1, 0x00FF);
+	glBegin(GL_LINES);
+		glVertex(startVert);
+		glVertex(endVert);
+	glEnd();
+	glDisable (GL_LINE_STIPPLE);
+}
 function DrawLine(visible) 
 {
 	var vec = Vector(3);
@@ -697,6 +723,7 @@ function DrawLine(visible)
 	if(!visible) return;
 	glPushAttrib(GL_LIGHTING_BIT | GL_LINE_BIT | GL_CURRENT_BIT);
 	
+	glColor(1,1,1);
 	glLineWidth(1);
 	glDisable(GL_LIGHTING);
 	
@@ -869,7 +896,7 @@ function joystickMove()
 	ConsoleText(0.1,0.30,Sprintf("buttons: %i, red: %i, yellow: %i, green: %i, blue: %i, joy butt: %i, trigger: %i", buts, b[0], b[1], b[2], b[3], b[4], b[5]));
 	#endif
 	
-	if (b[0]==1 && lastButtons%2==0) 
+	if (b[0]==1 && lastButtons%2==0 && b[5] == 0) 
 		joyMode = (joyMode == LOOK ? MOVE : LOOK);
 	
 	var oldMode = opMode;
@@ -907,11 +934,11 @@ function joystickMove()
 	
 	
 
-	if(joyMode == LOOK) {
+	if(joyMode == LOOK && b[5] == 0) {
 		//camera rotation
 		worldRotation += dX*ROT_SENSITIVITY;
 		worldRotation = worldRotation % 360;
-	} else {
+	} else if(b[5] == 0) {
 		CameraPos += VectorRotate(wandrot.y-worldRotation,0,1,0,CameraGetXAxis(),true) * dX * MV_SENSITIVITY 
 					+ VectorRotate(wandrot.y-worldRotation,0,1,0,CameraGetZAxis(),true) * -dY * MV_SENSITIVITY;
 		CameraPos.y = 1.1;
@@ -926,28 +953,37 @@ function joystickMove()
 	
 	static var PrecSphereX = 0, PrecSphereY = 0;
 	var TR_SENSITIVITY = 0.01;
-	//translate
 	mSelect.preVisible = mSelect.visible;
 	mSelect.visible = false;
 	if(b[5]==1 && curShape > -1 && opMode < NUM_MODES) {
 		var dX = WandRot.x - PrecSphereX;
 		var dY = WandRot.y - PrecSphereY;			
-		outputLN(sprintf("%.2f, %.2f",dX,dY));
+		//outputLN(sprintf("%.2f, %.2f",dX,dY));
 		if(opMode == TRANSLATE_MODE) {
 			//OutputLn(Sprintf("WandRot.x: %i",WandRot.x));
-			var dVec = shapes[curShape].pos - (CameraPos + wandpos); //vector from user head to shape
+			if (b[0]==1 && lastButtons%2==0) TranslateConstrain = ++TranslateConstrain % 4;
+			
+			var dVec1;
+			var dVec2 = shapes[curShape].pos - (CameraPos + wandpos); //vector from user head to shape
 			
 			//Rotate around local axis
 			var ourX = VectorRotate(-worldRotation, 0,1,0, [1,0,0], true);
 			var ourY = VectorRotate(-worldRotation, 0,1,0, [0,1,0], true);
 			
-			dVec = VectorRotate (dY, ourY, dVec, false);
-			dVec = VectorRotate (dX, ourX, dVec, false);
+			dVec1 = VectorRotate (dY, ourY, dVec2, false);
+			dVec1 = VectorRotate (dX, ourX, dVec1, false);
 			
-			shapes[curShape].pos = (CameraPos + wandpos) + dVec;
+			if(TranslateConstrain > 0) 
+				dVec2[TranslateConstrain - 1] = dVec1[TranslateConstrain - 1];
+			else
+				dVec2 = dVec1;
+			
+			shapes[curShape].pos = (CameraPos + wandpos) + dVec2;
 		} else if (opMode == SCALE_MODE) {		
 			shapes[curShape].bounds *= dX / 10 + 1;
+
 			shapes[curShape].FloorBounds();
+			shapes[curShape].SetShape();
 		} else if (opMode == ROTATE_MODE) {
 			shapes[curShape].rot.y += dY;
 		} else if (b[5]==1 && opMode == OBJECT_MODE && curShape > -1) {
@@ -977,6 +1013,7 @@ function joystickMove()
 		}
 	}
 	lastButtons = buts;
+	if(b[5] == 0) TranslateConstrain = 0;
 }
 
 function LoadIcon() {
@@ -996,7 +1033,10 @@ function LoadIcon() {
 			iconMesh = CVmNewMesh("icons\\scale.aam");
 			break;
 		case DELETE_MODE:
-			iconMesh = CVmNewMesh("icons\\scale.aam");
+			iconMesh = CVmNewMesh("icons\\delete.aam");
+			break;
+		case TEXTURE_MODE:
+			iconMesh = CVmNewMesh("icons\\texture.aam");
 			break;
 	}
 	iconMesh.Normalize(0.05);
@@ -1008,6 +1048,7 @@ function TumpleIcon() {
 }
 function getNewKeyboardEvents()
 {
+	return;
 	var key = keyboard();
 	var inputScale = 1;
 	var scale = [1,1,1];
