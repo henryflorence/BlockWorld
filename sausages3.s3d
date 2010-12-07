@@ -74,6 +74,7 @@ function PickShape();
 function PositionLights(centre);
 function DrawGroundPlane(centre);
 function LoadIcon();
+function LoadPointer();
 function TumpleIcon();
 function DrawConstrainLine();
 
@@ -555,7 +556,7 @@ function OnInit(params)
 	smallShape = MeshShape();
 	smallShape.SetMesh("pointer.aam", false);
 	smallShape.pos = startVert = [0,1,0];
-	smallShape.CalcBounds([0.1,0.1,0.1]);
+	smallShape.CalcBounds([0.04,0.04,0.04]);
 	
 	var mesh = CVmNewMesh("skyDome.aam");
 	skyDome = CVmObj();
@@ -663,12 +664,11 @@ function OnFrame()
 	if(b[5] == 0) PickShape();
 	if(TranslateConstrain > 0) DrawConstrainLine(); 
 	
-	glColor(1,0,0);
 	for (var i = 0; i < len(shapes); i++) {
 		if(curShape == i) {
 			glColor(.26,.71,.90);
 			if(shapes[i].__GetName() == "MESHSHAPE") shapes[i].obj.DrawBoundingBox();
-		}
+		} else glColor(1,0,0);
 		shapes[i].DrawShape();
 		if(curShape == i) glColor(1,0,0);
 	}
@@ -896,6 +896,7 @@ function joystickMove()
 	ConsoleText(0.1,0.30,Sprintf("buttons: %i, red: %i, yellow: %i, green: %i, blue: %i, joy butt: %i, trigger: %i", buts, b[0], b[1], b[2], b[3], b[4], b[5]));
 	#endif
 	
+	var oldJoyMode = joyMode;
 	if (b[0]==1 && lastButtons%2==0 && b[5] == 0) 
 		joyMode = (joyMode == LOOK ? MOVE : LOOK);
 	
@@ -905,6 +906,7 @@ function joystickMove()
 	
 	//if icon changed load new icon
 	if(oldMode != opMode) LoadIcon();
+	if(oldJoyMode != joyMode) LoadPointer();
 	
 	if (b[2]==1 && lastButtons/4%2==0 && b[5] == 0) {
 		aadd(shapes, Shape());
@@ -967,12 +969,13 @@ function joystickMove()
 			var dVec2 = shapes[curShape].pos - (CameraPos + wandpos); //vector from user head to shape
 			
 			//Rotate around local axis
-			var ourX = VectorRotate(-worldRotation, 0,1,0, [1,0,0], true);
-			var ourY = VectorRotate(-worldRotation, 0,1,0, [0,1,0], true);
+			var ourX = VectorRotate(headrot.y-worldRotation, 0,1,0, [1,0,0], true);
+			var ourY = VectorRotate(headrot.y-worldRotation, 0,1,0, [0,1,0], true);
 			
 			dVec1 = VectorRotate (dY, ourY, dVec2, false);
 			dVec1 = VectorRotate (dX, ourX, dVec1, false);
 			
+			//if translation is constrained, translate only along relavent axis
 			if(TranslateConstrain > 0) 
 				dVec2[TranslateConstrain - 1] = dVec1[TranslateConstrain - 1];
 			else
@@ -1042,6 +1045,13 @@ function LoadIcon() {
 	iconMesh.Normalize(0.05);
     iconObj.LinkToMesh(iconMesh);
     TumpleIcon();
+}
+function LoadPointer() {
+	SetLocalDir();
+	if(joyMode == LOOK)
+		smallShape.SetMesh("pointerLook.aam", false);
+	else
+		smallShape.SetMesh("pointer.aam", false);
 }
 function TumpleIcon() {
 	iconTumpleAxis = [Rand(1),Rand(1),Rand(1)];
