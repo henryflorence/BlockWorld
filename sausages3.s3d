@@ -19,7 +19,7 @@ SET SCENE_FAR  = 1000;
 #define DELETE_MODE 	5
 #define NUM_MODES 		6
 
-#define LOWPOLYWORLD
+//#define LOWPOLYWORLD
 #define DEBUG
 //#define HIGHPOLY
 // TODO: put your global variables here
@@ -47,6 +47,8 @@ var furnitureMesh;
 var endVert = Vector(3);
 var startVert = Vector(3);
 var wandRot = [0,0,0];
+var headrot = [0,0,0];
+var wandpos = [0,0,0];
 var b = Array(16);
 var kb = Array(16);
 var headpos = [1.5,1.8,1.5];
@@ -77,6 +79,7 @@ function LoadIcon();
 function LoadPointer();
 function TumpleIcon();
 function DrawConstrainLine();
+function LineGL(a,b);
 
 class Shape 
 {
@@ -420,21 +423,25 @@ function Shape::DistanceToLine(x1, x2) {
 	return modulus((pos - x1) ^ (pos - x2)) / modulus(x2 - x1);
 }
 
-class MeshSelector {
+class MeshSelector
+{
 	var meshes;
 	var names;
 	var fileNames;
-	var rot;
+	var rotsDir;
 	var visible;
 	var selected;
+	var selectedMesh;
 	var preVisible;
 	
 	Draw();
+	PickMesh();
+	UpdateRots();
 };
 
 function MeshSelector::MeshSelector() {
-	rot = 0;
 	visible = false;
+	selectedMesh = -1;
 	
 	OutputLN("Shapes file exists:",FileExist("shapes.txt"));
 	if(FileExist("shapes.txt")){
@@ -454,11 +461,6 @@ function MeshSelector::MeshSelector() {
 		meshes = Array(4);
 		names = Array(4);
 		fileNames = Array(4);
-		#ifdef HIGHPOLY
-		fileNames[0] = "tree1.aam";
-		fileNames[1] = "tree2.aam";
-		fileNames[2] = "tree3.aam";
-		#else
 		names[0] = "Monkey";
 		fileNames[0] = "monkey.aam";
 		names[1] = "Sphere";
@@ -467,12 +469,9 @@ function MeshSelector::MeshSelector() {
 		fileNames[2] = "cone.aam";
 		names[3] = "Fountain";
 		fileNames[3] = "fountain1.aam";
-		//fileNames[3] = "skewedHouse.AAM";
-		//fileNames[2] = "Fence.AAM";
-		
-		#endif
 	}
 
+	rotsDir = Array(0);
 	for(var i = 0; i < len(fileNames); i++) {
 		var mesh = CVmNewMesh(fileNames[i]);
 		#ifdef CAVE
@@ -483,8 +482,10 @@ function MeshSelector::MeshSelector() {
 		mesh.CenterBoundingBox();
 		meshes[i] = CVmObj();
 		meshes[i].LinkToMesh(mesh);
+		aadd(rotsDir,0.1*(rand(1) < 0.5 ? -1 : 1));
 	}
 }
+
 function MeshSelector::Draw() {
 	
 	#ifdef CAVE
@@ -494,31 +495,53 @@ function MeshSelector::Draw() {
 	#endif
 	
 	var d = 3;
-	var selectedMesh = -1;
-	var rads = rot;
+	var start = centre;
 	#ifdef CAVE
-	var r = 0.35;
+	start += [-1,-1,-0.35];
 	#else
-	var r = 2;
+	start += [-.75,.5,-3];
 	#endif
-	for (var i = 0; i < len(meshes); i++) {
-		meshes[i].SetPosition(centre.x + r * sin(rads), centre.y, centre.z - r * cos(rads));
-		if (Abs(rads) < d) { //checks to see if this shape is selected
-			selectedMesh = i;
-		 	d = Abs(rads);
+	var i = 0;
+	var pos = start;
+	
+	if(selectedMesh > -1) meshes[selectedMesh].DrawBoundingBox();
+	for(var y = 0; y < 4; y++) {
+		for(var x = 0; x < 4; x++) {
+			meshes[i].SetPosition(pos);
+			meshes[i].draw();
+			
+			if(++i >= len(meshes)) break; 
+			pos.x += .5;
 		}
-		meshes[i].draw();
-		
-		
-		ConsoleText(0.1,0.03*i+0.03,Sprintf("i: %i, rads: %f, d: %f, selectedMesh: %i", i, rads, d, selectedMesh));
-		rads += 0.4; //distance between shapes
+		if(++i >= len(meshes)) break;
+		pos.y += .5;
 	}
-	if (selectedMesh > -1) {
-		glColor(.26,.71,.90);
-		meshes[selectedMesh].DrawBoundingBox();
-		selected = fileNames[selectedMesh];
-	} else selected = 0;
 }
+function MeshSelector::UpdateRots() {
+	for(var i=0; i < len(meshes); i++) meshes[i].RotateABS(rotsDir[i],0,1,0);
+}
+function MeshSelector::PickMesh() {
+	var camStartVert = CameraGetPosition() + wandpos;
+	var camEndVert = [0,0,-100];
+	var d = 100;
+	
+	camEndVert = VectorRotate(wandRot.x,1,0,0,camEndVert,false);
+	camEndVert = VectorRotate(wandRot.y,0,1,0,camEndVert,false);
+	
+	//vec = VectorRotate(wandRot.z,0,0,1,vec,false);
+	//selectedMesh = -1;
+	for(var i = 0; i < len(meshes); i++) {
+		//http://mathworld.wolfram.com/Point-LineDistance3-Dimensional.html
+		var posD = modulus((meshes[i].GetPosition() - camStartVert) ^ (meshes[i].GetPosition() - camEndVert)) / modulus(camEndVert - camStartVert);
+		if(posD < d) {
+			d = posD;
+			selectedMesh = i; 
+			selected = fileNames[selectedMesh];
+		}
+	}
+	//outputLN(selectedMesh);
+}	
+
 function OnDownload()
 {
 	// TODO: download your resources here
@@ -653,14 +676,18 @@ function OnFrame()
 	smallShape.DrawShape();
 	iconObj.SetPosition(smallShape.pos + [0.04 * sin(iconRads),0.05,0.04 * cos(iconRads)]);
 	iconObj.Draw();
-	if (mSelect.visible) mSelect.Draw();
+	if (mSelect.visible) {
+		mSelect.Draw();
+		mSelect.PickMesh();
+		mSelect.UpdateRots();
+	}
 		
 	var CameraPos = CameraGetPosition() + headpos;
 	glTranslate(CameraPos);
 	glRotate(worldRotation,0,1,0);
 	glTranslate(-CameraPos);
 	
-	DrawLine(!mSelect.visible); //b[5] == 1);
+	DrawLine(true);
 	if(b[5] == 0) PickShape();
 	if(TranslateConstrain > 0) DrawConstrainLine(); 
 	
@@ -716,9 +743,7 @@ function DrawLine(visible)
 	vec = VectorRotate(wandRot.y - worldRotation,0,1,0,vec,false);
 	//vec = VectorRotate(wandRot.z,0,0,1,vec,false);
 	
-	endVert.x = startVert.x + vec.x;
-	endVert.y = startVert.y + vec.y;
-	endVert.z = startVert.z + vec.z;
+	endVert = startVert + vec;
 	
 	if(!visible) return;
 	glPushAttrib(GL_LIGHTING_BIT | GL_LINE_BIT | GL_CURRENT_BIT);
@@ -734,9 +759,13 @@ function DrawLine(visible)
 		glVertex(endVert);
 	glEnd();
 	glDisable (GL_LINE_STIPPLE);
-	
 }
-
+function LineGL(a,b) {
+	glBegin(GL_LINES);
+		glVertex(a);
+		glVertex(b);
+	glEnd();
+}
 function PickShape(){
 	curShape = -1;
 	var closest = 1000;
@@ -865,8 +894,8 @@ function joystickMove()
 	
 	#ifdef CAVE
 	headpos = GetTrackerPos(0);
-	var headrot = GetTrackerRot(0);
-	var wandpos = GetTrackerPos(1);
+	headrot = GetTrackerRot(0);
+	wandpos = GetTrackerPos(1);
 	wandrot = GetTrackerRot(1);
 	buts = GetTrackerButtons(1);
 	#else
@@ -992,7 +1021,6 @@ function joystickMove()
 		} else if (b[5]==1 && opMode == OBJECT_MODE && curShape > -1) {
 			//OutputLN("mesh Select");
 			mSelect.visible = true;
-			mSelect.rot = -wandRot.y / 180 * PI;
 		} else if (curShape >-1 && opMode == DELETE_MODE) {
 			if (b[5]==1 && lastButtons/32%2==0) {
 				OutputLN("Deleting ",curShape);
