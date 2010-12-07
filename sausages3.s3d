@@ -18,7 +18,7 @@ SET SCENE_FAR  = 1000;
 #define DELETE_MODE 4
 #define NUM_MODES 5
 
-//#define LOWPOLYWORLD
+#define LOWPOLYWORLD
 #define DEBUG
 //#define HIGHPOLY
 // TODO: put your global variables here
@@ -931,8 +931,9 @@ function joystickMove()
 			//OutputLn(Sprintf("WandRot.x: %i",WandRot.x));
 			var dVec = shapes[curShape].pos - (CameraPos + wandpos); //vector from user head to shape
 			
-			var ourX = VectorRotate(worldRotation, 0,1,0, [1,0,0], true);
-			var ourY = VectorRotate(worldRotation, 0,1,0, [0,1,0], true);
+			//Rotate around local axis
+			var ourX = VectorRotate(-worldRotation, 0,1,0, [1,0,0], true);
+			var ourY = VectorRotate(-worldRotation, 0,1,0, [0,1,0], true);
 			
 			dVec = VectorRotate (dY, ourY, dVec, false);
 			dVec = VectorRotate (dX, ourX, dVec, false);
