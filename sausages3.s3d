@@ -13,7 +13,7 @@ SET SCENE_FAR  = 1000;
 
 #define TRANSLATE_MODE 0
 #define SCALE_MODE 1 
-#define TEXTURE_MODE 2
+#define OBJECT_MODE 2
 #define ROTATE_MODE 3
 #define DELETE_MODE 4
 #define NUM_MODES 5
@@ -533,6 +533,12 @@ function OnInit(params)
 	/* initialize camera */
 	CameraSetPosition(CamPos);
 		
+		
+	/* background music */
+	var music = CVmMMMp3();
+	music.Load("bgm.mp3",true);
+	music.Play(true);
+
 	shapes = Array(2);
 	
 	glEnable(GL_NORMALIZE);
@@ -944,7 +950,7 @@ function joystickMove()
 			shapes[curShape].FloorBounds();
 		} else if (opMode == ROTATE_MODE) {
 			shapes[curShape].rot.y += dY;
-		} else if (b[5]==1 && opMode == TEXTURE_MODE && curShape > -1) {
+		} else if (b[5]==1 && opMode == OBJECT_MODE && curShape > -1) {
 			//OutputLN("mesh Select");
 			mSelect.visible = true;
 			mSelect.rot = -wandRot.y / 180 * PI;
@@ -960,7 +966,7 @@ function joystickMove()
 	PrecSphereX = wandRot.x;
 	PrecSphereY = wandRot.y;
 	
-	if(opMode == TEXTURE_MODE && curShape > -1) {
+	if(opMode == OBJECT_MODE && curShape > -1) {
 		if (mSelect.preVisible && !mSelect.Visible) {
 			OutputLN(mSelect.selected);
 			SetLocalDir("\\shapes\\");
@@ -983,7 +989,7 @@ function LoadIcon() {
 		case ROTATE_MODE:
 			iconMesh = CVmNewMesh("icons\\rotate.aam");
 			break;
-		case TEXTURE_MODE:
+		case OBJECT_MODE:
 			iconMesh = CVmNewMesh("icons\\object.aam");
 			break;
 		case SCALE_MODE:
