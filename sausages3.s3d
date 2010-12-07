@@ -25,7 +25,7 @@ SET SCENE_FAR  = 1000;
 
 /* Camera globals */
 //#ifdef CAVE
-var CamPos = [-3, 1.1, 13.0]; 	// camera position
+var CamPos = [-10, 1.1, 0]; 	// camera position
 
 
 var shapes;
@@ -36,7 +36,7 @@ var scaling = false;
 var joyMode = MOVE;
 var opMode = TRANSLATE_MODE;
 var lastButtons = 0;
-var worldRotation = 0;
+var worldRotation = 90;
 var pointer = [0.5,0.5,0];
 var smallShape;
 var skyDome;
@@ -883,6 +883,7 @@ function joystickMove()
 	if(joyMode == LOOK) {
 		//camera rotation
 		worldRotation += dX*ROT_SENSITIVITY;
+		worldRotation = worldRotation % 360;
 	} else {
 		CameraPos += VectorRotate(wandrot.y-worldRotation,0,1,0,CameraGetXAxis(),true) * dX * MV_SENSITIVITY 
 					+ VectorRotate(wandrot.y-worldRotation,0,1,0,CameraGetZAxis(),true) * -dY * MV_SENSITIVITY;
@@ -904,14 +905,17 @@ function joystickMove()
 	if(b[5]==1 && curShape > -1 && opMode < NUM_MODES) {
 		var dX = WandRot.x - PrecSphereX;
 		var dY = WandRot.y - PrecSphereY;			
-
+		outputLN(sprintf("%.2f, %.2f",dX,dY));
 		if(opMode == TRANSLATE_MODE) {
 			//OutputLn(Sprintf("WandRot.x: %i",WandRot.x));
 			var dVec = shapes[curShape].pos - (CameraPos + wandpos); //vector from user head to shape
-			dVec = VectorRotate (-worldRotation, 0,1,0, dVec, false);
-			dVec = VectorRotate (dY, 0,1,0, dVec, false);
-			dVec = VectorRotate (dX, 1,0,0, dVec, false);
-			dVec = VectorRotate (worldRotation, 0,1,0, dVec, false);
+			
+			var ourX = VectorRotate(worldRotation, 0,1,0, [1,0,0], true);
+			var ourY = VectorRotate(worldRotation, 0,1,0, [0,1,0], true);
+			
+			dVec = VectorRotate (dY, ourY, dVec, false);
+			dVec = VectorRotate (dX, ourX, dVec, false);
+			
 			shapes[curShape].pos = (CameraPos + wandpos) + dVec;
 		} else if (opMode == SCALE_MODE) {		
 			shapes[curShape].bounds *= dX / 10 + 1;
