@@ -1,0 +1,4 @@
+Monkey,monkey.aam
+Sphere,sphere.aam
+Cone,cone.aam
+Fountain,fountain1.aam

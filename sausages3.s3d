@@ -15,8 +15,10 @@ SET SCENE_FAR  = 1000;
 #define SCALE_MODE 1 
 #define TEXTURE_MODE 2
 #define ROTATE_MODE 3
-#define NUM_MODES 4
+#define DELETE_MODE 4
+#define NUM_MODES 5
 
+//#define LOWPOLYWORLD
 #define DEBUG
 //#define HIGHPOLY
 // TODO: put your global variables here
@@ -24,7 +26,7 @@ SET SCENE_FAR  = 1000;
 
 /* Camera globals */
 //#ifdef CAVE
-var CamPos = [0.0, 1.1, 0.0]; 	// camera position
+var CamPos = [-10, 1.1, 0]; 	// camera position
 
 
 var shapes;
@@ -35,7 +37,7 @@ var scaling = false;
 var joyMode = MOVE;
 var opMode = TRANSLATE_MODE;
 var lastButtons = 0;
-var worldRotation = 0;
+var worldRotation = 90;
 var pointer = [0.5,0.5,0];
 var smallShape;
 var skyDome;
@@ -151,7 +153,7 @@ function Shape::Shape()
 	  {0, 1, 2, 3}, {3, 2, 6, 7}, {7, 6, 5, 4},
 	  {4, 5, 1, 0}, {5, 6, 2, 1}, {7, 4, 0, 3} };
 	 
-	pos = [0,1,0];
+	pos = [0,20,0];
 	rot = [0,0,0];
 	bounds = [1,1,1];
 	corners = Array(8);
@@ -230,14 +232,14 @@ function Shape::DrawShape()
 }
 
 function Shape::FloorBounds() {
-	if(bounds.x < 0.001) bounds.x = 0.001;
-	else if(bounds.x > 100) bounds.x = 100;
+	if(bounds.x < 0.01) bounds.x = 0.01;
+	else if(bounds.x > 10) bounds.x = 10;
 	
-	if(bounds.y < 0.001) bounds.y = 0.001;
-	else if(bounds.y > 100) bounds.y = 100;
+	if(bounds.y < 0.01) bounds.y = 0.01;
+	else if(bounds.y > 10) bounds.y = 10;
 	
-	if(bounds.z < 0.001) bounds.z = 0.001;
-	else if(bounds.z > 100) bounds.z = 100;
+	if(bounds.z < 0.01) bounds.z = 0.01;
+	else if(bounds.z > 10) bounds.z = 10;
 }
 function Shape::CalcBounds(scale) {
 	bounds.x = bounds.x * scale.x;
@@ -268,6 +270,7 @@ function Shape::CheckBounds() {
 	pos.z += dP;
 	
 	foreach(var s in shapes) {
+		if(s == this) continue;
 		if(s.GetRight() > leftBound)
 			leftBound = CheckValues( leftBound, GetLeft(), s.GetLeft(), s.GetRight(), GetBottom() + 0.15, GetTop() - 0.15, 
 								s.GetBottom(), s.GetTop(), GetFront() + 0.15, GetBack() - 0.15, s.GetFront(), s.GetBack());
@@ -293,24 +296,37 @@ function Shape::CheckBounds() {
 	pos.y -= dP;
 	pos.z -= dP;
 	
-	if(GetLeft() < leftBound && GetRight() > rightBound) {
-		bounds.x = (rightBound - leftBound) / 2;
-		SetShape();
-	} else if(GetLeft() < leftBound) SetLeft(leftBound);
-	else if(GetRight() > rightBound) SetRight(rightBound);
+	if(opMode == SCALE_MODE) {
+		if(GetLeft() < leftBound && GetRight() > rightBound) {
+			bounds.x = (rightBound - leftBound) / 2;
+			SetShape();
+		} else if(GetLeft() < leftBound) SetLeft(leftBound);
+		else if(GetRight() > rightBound) SetRight(rightBound);
+		
+		
+		if(GetBottom() < bottomBound && GetTop() > topBound) {
+			bounds.y = (topBound - bottomBound) / 2;
+			SetShape();
+		} else if(GetBottom() < bottomBound) SetBottom(bottomBound);
+		else if(GetTop() > topBound) SetTop(topBound);
+		
+		if(GetFront() < frontBound && GetBack() > backBound) {
+			bounds.z = (backBound - frontBound - 0.15) / 2;
+			SetShape();
+		} else if(GetFront() < frontBound) SetFront(frontBound);
+		else if(GetBack() > backBound) SetBack(backBound);
+	} else {
+		if(GetLeft() < leftBound) SetLeft(leftBound);
+		else if(GetRight() > rightBound) SetRight(rightBound);
+		
+		if(GetBottom() < bottomBound) SetBottom(bottomBound);
+		else if(GetTop() > topBound) SetTop(topBound);
+		
+		if(GetFront() < frontBound) SetFront(frontBound);
+		else if(GetBack() > backBound) SetBack(backBound);
+	}
 	
-	
-	if(GetBottom() < bottomBound && GetTop() > topBound) {
-		bounds.y = (topBound - bottomBound) / 2;
-		SetShape();
-	} else if(GetBottom() < bottomBound) SetBottom(bottomBound);
-	else if(GetTop() > topBound) SetTop(topBound);
-	
-	if(GetFront() < frontBound && GetBack() > backBound) {
-		bounds.z = (backBound - frontBound - 0.15) / 2;
-		SetShape();
-	} else if(GetFront() < frontBound) SetFront(frontBound);
-	else if(GetBack() > backBound) SetBack(backBound);
+	FloorBounds();
 }
 function Shape::CheckValues( bound, lt, olt, ort, bt, tp, obt, otp, ft, bk, oft, obk )
 {
@@ -329,17 +345,27 @@ function Shape::CheckValues( bound, lt, olt, ort, bt, tp, obt, otp, ft, bk, oft,
 
 	return bound;
 }
-function shape::Gravity()
+function Shape::Gravity()
 {
-	static dS = 0;
+	static var dS = 0;
 	if(pauseCount > 0) pauseCount--;
 	if ((b[5] == 1 && shapes[curShape] == this) || pauseCount > 0) return;
+	
+	//switch this off and watch them wobble!
+	pos.y -= 0.1;
+	var bottomBound = 0;
+	foreach(var s in shapes) {
+			bottomBound = CheckValues( bottomBound, GetBottom(), s.GetBottom(), s.GetTop(), GetLeft() + 0.15, GetRight() - 0.15, 
+								s.GetLeft(), s.GetRight(), GetFront() + 0.15, GetBack() - 0.15, s.GetFront(), s.GetBack());
+	}
+	pos.y += 0.1;
+	
 	//v = sqrt(2a * delta S)
 	if(dS == 0) dS = 0.1;
 	
 	var oldY = pos.y;
 	pos.y -= sqrt(2*dS);
-	if(GetBottom() < 0)  pos.y -= pos.y - bounds.y;
+	if(GetBottom() < bottomBound)  SetBottom(bottomBound);
 	
 	dS = oldY - pos.y;
 }
@@ -392,6 +418,7 @@ function Shape::DistanceToLine(x1, x2) {
 
 class MeshSelector {
 	var meshes;
+	var names;
 	var fileNames;
 	var rot;
 	var visible;
@@ -405,22 +432,42 @@ function MeshSelector::MeshSelector() {
 	rot = 0;
 	visible = false;
 	
-	meshes = Array(4);
-	fileNames = Array(4);
-	
-	#ifdef HIGHPOLY
-	fileNames[0] = "tree1.aam";
-	fileNames[1] = "tree2.aam";
-	fileNames[2] = "tree3.aam";
-	#else
-	fileNames[0] = "monkey.aam";
-	fileNames[1] = "sphere.aam";
-	fileNames[2] = "cone.aam";
-	fileNames[3] = "fountain1.aam";
-	//fileNames[3] = "skewedHouse.AAM";
-	//fileNames[2] = "Fence.AAM";
-	
-	#endif
+	OutputLN("Shapes file exists:",FileExist("shapes.txt"));
+	if(FileExist("shapes.txt")){
+		var lines = LoadFile("shapes.txt");
+		meshes = Array(len(lines));
+		names = Array(0);
+		fileNames = Array(0);
+		OutputLN("len(lines):",len(lines));
+		foreach(var line in lines) {
+			var tokens = Split(line,",");
+			aadd(names,tokens[0]);
+			aadd(fileNames,tokens[1]);
+			OutputLN(line);
+		}
+		OutputLN("@");
+	} else {
+		meshes = Array(4);
+		names = Array(4);
+		fileNames = Array(4);
+		#ifdef HIGHPOLY
+		fileNames[0] = "tree1.aam";
+		fileNames[1] = "tree2.aam";
+		fileNames[2] = "tree3.aam";
+		#else
+		names[0] = "Monkey";
+		fileNames[0] = "monkey.aam";
+		names[1] = "Sphere";
+		fileNames[1] = "sphere.aam";
+		names[2] = "Cone";
+		fileNames[2] = "cone.aam";
+		names[3] = "Fountain";
+		fileNames[3] = "fountain1.aam";
+		//fileNames[3] = "skewedHouse.AAM";
+		//fileNames[2] = "Fence.AAM";
+		
+		#endif
+	}
 
 	for(var i = 0; i < len(fileNames); i++) {
 		var mesh = CVmNewMesh(fileNames[i]);
@@ -583,6 +630,7 @@ function DrawGroundPlane(centre)
 }
 function OnFrame()
 {
+ 	joystickMove();
 	
 	/* manage camera */
 	CameraMoveMouse();
@@ -602,26 +650,28 @@ function OnFrame()
 	glRotate(worldRotation,0,1,0);
 	glTranslate(-CameraPos);
 	
-	//DrawGrid([0.5, 0.5, 0.5], 10);
-	
 	DrawLine(!mSelect.visible); //b[5] == 1);
 	if(b[5] == 0) PickShape();
 	
-	
+	glColor(1,0,0);
 	for (var i = 0; i < len(shapes); i++) {
 		if(curShape == i) {
 			glColor(.26,.71,.90);
 			if(shapes[i].__GetName() == "MESHSHAPE") shapes[i].obj.DrawBoundingBox();
 		}
 		shapes[i].DrawShape();
-		if(curShape == i) glColor(1,1,1);
+		if(curShape == i) glColor(1,0,0);
 	}
 	
 	PositionLights(CameraPos.x0z);
 	skyDome.SetPosition(CameraPos.x0z);
-	skyDome.Draw();
 	
+	#ifndef LOWPOLYWORLD
+	skyDome.Draw();
 	DrawGroundPlane(CameraPos.x0z);
+	#else
+	DrawGrid([0.5, 0.5, 0.5], 10);
+	#endif
 	//furnitureObj .Draw();
 	SceneEnd();
 }
@@ -653,6 +703,7 @@ function DrawLine(visible)
 	glDisable (GL_LINE_STIPPLE);
 	
 }
+
 function PickShape(){
 	curShape = -1;
 	var closest = 1000;
@@ -667,6 +718,7 @@ function PickShape(){
 		#endif
 	}
 }
+
 function DownloadReady(RequestID)
 {
 	// TODO
@@ -676,10 +728,15 @@ function DownloadReady(RequestID)
 
 function OnTimer()
 {
+	static var waitCount = 10;
 	getNewKeyboardEvents();
-	joystickMove();
+	//joystickMove();
 	foreach (var shape in shapes) shape.Gravity();
 	iconRads += 0.01;
+	if(waitCount-- == 0) {
+		skyDome.RotateABS(0.005,0,1,0);
+		waitCount = 10;
+	}
 	iconObj.Rotate(0.3,iconTumpleAxis);
 }
 // Camera manager (using mouse)
@@ -764,7 +821,7 @@ function joystickMove()
 	#endif
 	for (var i=0;i<=15;i+=1)
 	{
-		if(1==(buts%2) || kb[i] == 1) b[i] = 1;
+		if(1==(buts%2) || kb[i]==1) b[i] = 1;
 		else b[i] = 0;
 		buts/=2;
 		//b[i] = 0;
@@ -822,10 +879,10 @@ function joystickMove()
 	}
 	
 	//object just released?
-	if (b[5]==0 && lastButtons/32%2==1) shapes[curShape].pauseCount = 20;
+	if (curShape>-1 && b[5]==0 && lastButtons/32%2==1) shapes[curShape].pauseCount = 20;
 		
 	ConsoleText(0,0.90,Sprintf("%s | %s", joyMode == LOOK ? "look" : "move", opMode == TRANSLATE_MODE ? "translate" : (opMode == SCALE_MODE ? "scale" : "object")));	
-	lastButtons = buts;
+	
 	
 	//camera translation
 	#ifdef CAVE
@@ -847,6 +904,7 @@ function joystickMove()
 	if(joyMode == LOOK) {
 		//camera rotation
 		worldRotation += dX*ROT_SENSITIVITY;
+		worldRotation = worldRotation % 360;
 	} else {
 		CameraPos += VectorRotate(wandrot.y-worldRotation,0,1,0,CameraGetXAxis(),true) * dX * MV_SENSITIVITY 
 					+ VectorRotate(wandrot.y-worldRotation,0,1,0,CameraGetZAxis(),true) * -dY * MV_SENSITIVITY;
@@ -868,15 +926,18 @@ function joystickMove()
 	if(b[5]==1 && curShape > -1 && opMode < NUM_MODES) {
 		var dX = WandRot.x - PrecSphereX;
 		var dY = WandRot.y - PrecSphereY;			
-
+		outputLN(sprintf("%.2f, %.2f",dX,dY));
 		if(opMode == TRANSLATE_MODE) {
 			//OutputLn(Sprintf("WandRot.x: %i",WandRot.x));
-			var dVec = shapes[curShape].pos - (CameraPos + headpos); //vector from user head to shape
-			dVec = VectorRotate (-worldRotation, 0,1,0, dVec, false);
-			dVec = VectorRotate (dY, 0,1,0, dVec, false);
-			dVec = VectorRotate (dX, 1,0,0, dVec, false);
-			dVec = VectorRotate (worldRotation, 0,1,0, dVec, false);
-			shapes[curShape].pos = (CameraPos + headpos) + dVec;
+			var dVec = shapes[curShape].pos - (CameraPos + wandpos); //vector from user head to shape
+			
+			var ourX = VectorRotate(worldRotation, 0,1,0, [1,0,0], true);
+			var ourY = VectorRotate(worldRotation, 0,1,0, [0,1,0], true);
+			
+			dVec = VectorRotate (dY, ourY, dVec, false);
+			dVec = VectorRotate (dX, ourX, dVec, false);
+			
+			shapes[curShape].pos = (CameraPos + wandpos) + dVec;
 		} else if (opMode == SCALE_MODE) {		
 			shapes[curShape].bounds *= dX / 10 + 1;
 			shapes[curShape].FloorBounds();
@@ -886,7 +947,14 @@ function joystickMove()
 			//OutputLN("mesh Select");
 			mSelect.visible = true;
 			mSelect.rot = -wandRot.y / 180 * PI;
+		} else if (curShape >-1 && opMode == DELETE_MODE) {
+			if (b[5]==1 && lastButtons/32%2==0) {
+				OutputLN("Deleting ",curShape);
+				adel(shapes,curShape);
+				curShape=-1;
+			}
 		}
+		if(curShape > -1) shapes[curShape].CheckBounds();
 	}
 	PrecSphereX = wandRot.x;
 	PrecSphereY = wandRot.y;
@@ -901,7 +969,9 @@ function joystickMove()
 			shapes[curShape].pos = pos;
 		}
 	}
+	lastButtons = buts;
 }
+
 function LoadIcon() {
 	SetLocalDir();
 	var iconMesh;
@@ -916,6 +986,9 @@ function LoadIcon() {
 			iconMesh = CVmNewMesh("icons\\object.aam");
 			break;
 		case SCALE_MODE:
+			iconMesh = CVmNewMesh("icons\\scale.aam");
+			break;
+		case DELETE_MODE:
 			iconMesh = CVmNewMesh("icons\\scale.aam");
 			break;
 	}
@@ -935,11 +1008,22 @@ function getNewKeyboardEvents()
 	if(key == "z") scale = [0.9,0.9,0.9];
 	else if(key == "x") scale = [1.1,1.1,1.1];
 	
+	var CameraPos = CameraGetPosition();
+	#ifdef SHAPEDEBUG
 	if(key == "w") shapes[curShape].pos.y += 0.1;
 	else if(key == "s") shapes[curShape].pos.y -= 0.1;
-		
+	
 	if(key == "d") shapes[curShape].pos.x += 0.1;
 	else if(key == "a") shapes[curShape].pos.x -= 0.1;
+	#else
+	if(key == "w") CameraPos -= VectorRotate(wandrot.y-worldRotation,0,1,0,CameraGetZAxis(),true) * 0.1;
+	else if(key == "s") CameraPos += VectorRotate(wandrot.y-worldRotation,0,1,0,CameraGetZAxis(),true) * 0.1;
+		
+	if(key == "d") CameraPos += VectorRotate(wandrot.y-worldRotation,0,1,0,CameraGetXAxis(),true) * 0.1;
+	else if(key == "a") CameraPos -= VectorRotate(wandrot.y-worldRotation,0,1,0,CameraGetXAxis(),true) * 0.1;
+	#endif
+	
+	CameraSetPosition(CameraPos);
 	
 	if(key == "r") shapes[curShape].pos.z -= 0.1;
 	else if(key == "f") shapes[curShape].pos.z += 0.1;
@@ -962,11 +1046,6 @@ function getNewKeyboardEvents()
 	
 	if (key == "<") worldRotation -= 5;
 	else if (key == ">") worldRotation += 5;
-	
-	if(curShape > -1) {
-		shapes[curShape].CalcBounds(scale);
-		shapes[curShape].CheckBounds();
-	}
 	
 	//ConsoleText(0.05, 0.15, Sprintf("bounds: %.2f %.2f %.2f",shapes[curShape].bounds.x,shapes[curShape].bounds.y,shapes[curShape].bounds.z));
 	//ConsoleText(0.05, 0.12, Sprintf("position: %.2f %.2f %.2f",shapes[curShape].pos.x,shapes[curShape].pos.y,shapes[curShape].pos.z));
