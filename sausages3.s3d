@@ -430,9 +430,14 @@ class MeshSelector
 	var fileNames;
 	var rotsDir;
 	var visible;
+	var offset;
 	var selected;
 	var selectedMesh;
+	var selectedArrow;
 	var preVisible;
+	
+	var rightArrow;
+	var leftArrow;
 	
 	Draw();
 	PickMesh();
@@ -442,6 +447,8 @@ class MeshSelector
 function MeshSelector::MeshSelector() {
 	visible = false;
 	selectedMesh = -1;
+	selectedArrow = -1;
+	offset = 0;
 	
 	OutputLN("Shapes file exists:",FileExist("shapes.txt"));
 	if(FileExist("shapes.txt")){
@@ -484,6 +491,16 @@ function MeshSelector::MeshSelector() {
 		meshes[i].LinkToMesh(mesh);
 		aadd(rotsDir,0.1*(rand(1) < 0.5 ? -1 : 1));
 	}
+	
+	var mesh = CVmNewMesh("..\\rightArrow.aam");
+	rightArrow = CVmObj();
+	rightArrow.LinkToMesh(mesh);
+	rightArrow.SetScale([.2,.2,.2]);
+	
+	mesh = CVmNewMesh("..\\leftArrow.aam");
+	leftArrow = CVmObj();
+	leftArrow.LinkToMesh(mesh);
+	leftArrow.SetScale([.2,.2,.2]);
 }
 
 function MeshSelector::Draw() {
@@ -494,14 +511,17 @@ function MeshSelector::Draw() {
 	var centre = CameraGetPosition(); // + headpos;
 	#endif
 	
+	rightArrow.SetPosition(centre + [1.35,0,-3]);
+	leftArrow.SetPosition(centre - [1.35,0,3]);
+	
 	var d = 3;
 	var start = centre;
 	#ifdef CAVE
 	start += [-1,-1,-0.35];
 	#else
-	start += [-.75,.5,-3];
+	start += [-.75,.75,-3];
 	#endif
-	var i = 0;
+	var i = offset;
 	var pos = start;
 	
 	if(selectedMesh > -1) meshes[selectedMesh].DrawBoundingBox();
@@ -513,9 +533,12 @@ function MeshSelector::Draw() {
 			if(++i >= len(meshes)) break; 
 			pos.x += .5;
 		}
-		if(++i >= len(meshes)) break;
-		pos.y += .5;
+		if(i >= len(meshes)) break;
+		pos.x = start.x;
+		pos.y -= .5;
 	}
+	rightArrow.draw();
+	leftArrow.draw();	
 }
 function MeshSelector::UpdateRots() {
 	for(var i=0; i < len(meshes); i++) meshes[i].RotateABS(rotsDir[i],0,1,0);
@@ -524,22 +547,37 @@ function MeshSelector::PickMesh() {
 	var camStartVert = CameraGetPosition() + wandpos;
 	var camEndVert = [0,0,-100];
 	var d = 100;
+	static var preSelectedArrow;
 	
 	camEndVert = VectorRotate(wandRot.x,1,0,0,camEndVert,false);
 	camEndVert = VectorRotate(wandRot.y,0,1,0,camEndVert,false);
 	
-	//vec = VectorRotate(wandRot.z,0,0,1,vec,false);
-	//selectedMesh = -1;
-	for(var i = 0; i < len(meshes); i++) {
+	selectedMesh = -1;
+	//LineGL(camStartVert,camEndVert);
+	for(var i = offset; i < len(meshes) && i < offset + 16; i++) {
 		//http://mathworld.wolfram.com/Point-LineDistance3-Dimensional.html
 		var posD = modulus((meshes[i].GetPosition() - camStartVert) ^ (meshes[i].GetPosition() - camEndVert)) / modulus(camEndVert - camStartVert);
-		if(posD < d) {
+		if(posD < d) { // && i < offset && i < offset + 16) {
 			d = posD;
 			selectedMesh = i; 
 			selected = fileNames[selectedMesh];
 		}
 	}
-	//outputLN(selectedMesh);
+	preSelectedArrow = selectedArrow;
+	selectedArrow = -1;
+	
+	var ltArrowD = modulus((leftArrow.GetPosition() - camStartVert) ^ (leftArrow.GetPosition() - camEndVert)) / modulus(camEndVert - camStartVert);
+	var rtArrowD = modulus((rightArrow.GetPosition() - camStartVert) ^ (rightArrow.GetPosition() - camEndVert)) / modulus(camEndVert - camStartVert);
+	if(ltArrowD < d) { selectedMesh = -1; selectedArrow = 0; d = ltArrowD; }
+	else if(rtArrowD < d && rtArrowD < 0.3) { selectedMesh = -1; selectedArrow = 1; d = rtArrowD; }
+	
+	if(selectedArrow != preSelectedArrow && selectedArrow > -1) {
+		if(selectedArrow == 0) { outputLN("going left..."); offset -= 16; }
+	 	else { outputLN("going right..."); offset += 16; }
+	}
+	
+	offset = offset % len(meshes);
+	if(offset < 0) offset = len(meshes) + offset;
 }	
 
 function OnDownload()
@@ -564,7 +602,7 @@ function OnInit(params)
 	/* background music */
 	var music = CVmMMMp3();
 	music.Load("bgm.mp3",true);
-	music.Play(true);
+	//music.Play(true);
 
 	shapes = Array(2);
 	
@@ -761,6 +799,7 @@ function DrawLine(visible)
 	glDisable (GL_LINE_STIPPLE);
 }
 function LineGL(a,b) {
+	OutputLN("drawing line...");
 	glBegin(GL_LINES);
 		glVertex(a);
 		glVertex(b);
@@ -1034,7 +1073,7 @@ function joystickMove()
 	PrecSphereY = wandRot.y;
 	
 	if(opMode == OBJECT_MODE && curShape > -1) {
-		if (mSelect.preVisible && !mSelect.Visible) {
+		if (mSelect.preVisible && !mSelect.Visible && mSelect.selectedMesh > -1) {
 			OutputLN(mSelect.selected);
 			SetLocalDir("\\shapes\\");
 			var pos = shapes[curShape].pos;
