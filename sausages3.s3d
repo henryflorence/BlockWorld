@@ -567,36 +567,39 @@ function MeshSelector::Draw() {
 	var centre = CameraGetPosition(); // + headpos;
 	#endif
 	
-	rightArrow.SetPosition(centre + [1.35,0,-3]);
-	leftArrow.SetPosition(centre - [1.35,0,3]);
+	centre += VectorRotate(headrot.y,0,1,0,[0,0,-3],false);
+	var lX = VectorRotate(headrot.y,0,1,0,[1,0,0],true);
+	
+	rightArrow.SetPosition(centre + 1.35 * lX);
+	leftArrow.SetPosition(centre - 1.35 * lX);
 	
 	var d = 3;
 	var start = centre;
 	var xinc = 0.6;
 	#ifdef CAVE
-	start += [-.9,.3,-3];
+	start += [0,.3,0] - .9 * lX;
 	#else
-	start += [-.75,.75,-3];
+	start += [0,.75,0] - .75 * lX;
 	xinc = 0.5;
 	#endif
 	var i = offset;
 	var pos = start;
 	
 	if(selectedMesh > -1) meshes[selectedMesh].DrawBoundingBox();
-	for(var y = 0; y < 4; y++) {
+	for(var y = 1; y < 5; y++) {
 		for(var x = 0; x < 4; x++) {
 			meshes[i].SetPosition(pos);
 			meshes[i].draw();
 			//Text Drawing
-			var text =  CVmText(names[i]);
-			text.SetPosition(pos.x,pos.y-.4,pos.z);
+			//var text =  CVmText(names[i]);
+			//text.SetPosition(pos.x,pos.y-.4,pos.z);
 			//
 			if(++i >= len(meshes)) break; 
-			pos.x += xinc;
+			pos += xinc * lX;
 		}
 		if(i >= len(meshes)) break;
-		pos.x = start.x;
-		pos.y -= .5;
+		pos = start;
+		pos.y -= .5 * y;
 	}
 	rightArrow.draw();
 	leftArrow.draw();	
