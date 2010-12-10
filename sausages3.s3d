@@ -256,14 +256,13 @@ function Shape::DrawShape()
 	glTranslate(pos);
 
 	glBegin(GL_QUADS);
-	//for(var i = 0; i < 6; i++)
-	//{
-	var i = 0;
+	for(var i = 0; i < 6; i++)
+	{
 		glTexCoord(0,0); glVertex(corners[faces[i][0]]);
-		glTexCoord(100,0); glVertex(corners[faces[i][1]]);
-		glTexCoord(100,100); glVertex(corners[faces[i][2]]);
-		glTexCoord(0,100); glVertex(corners[faces[i][3]]);
-	//}
+		glTexCoord(0,1); glVertex(corners[faces[i][1]]);
+		glTexCoord(1,1); glVertex(corners[faces[i][2]]);
+		glTexCoord(1,0); glVertex(corners[faces[i][3]]);
+	}
 	glEnd();
 	
 	glPopMatrix();
