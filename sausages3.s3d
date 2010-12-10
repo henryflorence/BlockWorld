@@ -101,6 +101,7 @@ class Shape
 	CheckValues( bound, lt, olt, ort, bt, tp, obt, otp, ft, bk, oft, obk );
 	DistanceToLine(x1, x2);
 	Gravity();
+	DrawSelected();
 	
 	GetLeft();
 	GetRight();
@@ -129,6 +130,7 @@ class MeshShape : Shape
 	SetMesh(file, normalise);
 	DrawShape();
 	Clone(oldShape);
+	DrawSelected();
 };
 function MeshShape::SetMesh(file, normalise)
 {
@@ -214,6 +216,22 @@ function MeshShape::DrawShape()
 	obj.Rotate(rot.z, [0,0,1]);
 	obj.SetScale(bounds);
 	obj.Draw();
+	
+	glPushMatrix();
+	glTranslate(pos);
+
+	glBegin(GL_QUADS);
+	glVertex(corners[faces[3][0]]);
+	glVertex(corners[faces[3][3]]);
+	glVertex(corners[faces[3][2]]);
+	glVertex(corners[faces[3][1]]);
+	glEnd();
+	
+	glPopMatrix();
+}
+function MeshShape::DrawSelected() 
+{
+	obj.DrawBoundingBox();
 }
 function Shape::DrawShape()
 {
@@ -222,21 +240,39 @@ function Shape::DrawShape()
 	//glLoadIdentity();
 	
 	glPushMatrix();
+	
+	SetActiveTexture(groundTexture);
+	glTexEnvf( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE );
+	// when texture area is small, bilinear filter the closest mipmap
+	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                 GL_LINEAR_MIPMAP_NEAREST );
+	// when texture area is large, bilinear filter the original
+	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+
+	// the texture wraps over at the edges (repeat)
+	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT );
+	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT );	
+	
 	glTranslate(pos);
+
 	glBegin(GL_QUADS);
-	for(var i = 0; i < 6; i++)
-	{
-		glVertex(corners[faces[i][0]]);
-		glVertex(corners[faces[i][1]]);
-		glVertex(corners[faces[i][2]]);
-		glVertex(corners[faces[i][3]]);
-	}
+	//for(var i = 0; i < 6; i++)
+	//{
+	var i = 0;
+		glTexCoord(0,0); glVertex(corners[faces[i][0]]);
+		glTexCoord(100,0); glVertex(corners[faces[i][1]]);
+		glTexCoord(100,100); glVertex(corners[faces[i][2]]);
+		glTexCoord(0,100); glVertex(corners[faces[i][3]]);
+	//}
 	glEnd();
 	
 	glPopMatrix();
 	//glPopAttrib();	
 }
-
+function Shape::DrawSelected() 
+{
+	
+}
 function Shape::FloorBounds() {
 	if(bounds.x < 0.01) bounds.x = 0.01;
 	else if(bounds.x > 10) bounds.x = 10;
@@ -730,12 +766,9 @@ function OnFrame()
 	if(TranslateConstrain > 0) DrawConstrainLine(); 
 	
 	for (var i = 0; i < len(shapes); i++) {
-		if(curShape == i) {
-			glColor(.26,.71,.90);
-			if(shapes[i].__GetName() == "MESHSHAPE") shapes[i].obj.DrawBoundingBox();
-		} else glColor(1,0,0);
+		if(curShape == i)
+			shapes[i].DrawSelected();
 		shapes[i].DrawShape();
-		if(curShape == i) glColor(1,0,0);
 	}
 	
 	PositionLights(CameraPos.x0z);
