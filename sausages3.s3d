@@ -27,7 +27,7 @@ SET SCENE_FAR  = 1000;
 
 /* Camera globals */
 //#ifdef CAVE
-var CamPos = [0, 1.1, 10]; 	// camera position
+var CamPos = [-10, 1.1, 0]; 	// camera position
 
 
 var shapes;
@@ -38,7 +38,7 @@ var scaling = false;
 var joyMode = MOVE;
 var opMode = TRANSLATE_MODE;
 var lastButtons = 0;
-var worldRotation = 0;
+var worldRotation = 90;
 var pointer = [0.5,0.5,0];
 var smallShape;
 var skyDome;
@@ -283,7 +283,22 @@ function Shape::DrawShape()
 }
 function Shape::DrawSelected() 
 {
+	glPushAttrib(GL_LIGHTING_BIT | GL_LINE_BIT | GL_CURRENT_BIT);
 	
+	glColor(0,.23,.45);
+	glLineWidth(2);
+	glDisable(GL_LIGHTING);
+	
+	var xs = {-bounds.x,bounds.x};
+	var zs = {bounds.z,bounds.z};
+	
+	glTranslate(pos);
+	var i = 0;
+	glBegin(GL_LINES);
+		glVertex(xs[i],0,zs[i]);
+		glVertex(xs[i+1],0,zs[i+1]);
+	glEnd();
+	glPopAttrib();
 }
 function Shape::FloorBounds() {
 	if(bounds.x < 0.01) bounds.x = 0.01;
@@ -668,16 +683,16 @@ function OnInit(params)
 	//music.Load("bgm.mp3",true);
 	//music.Play(true);
 
-	shapes = Array(1);
+	shapes = Array(2);
 	
 	glEnable(GL_NORMALIZE);
 	
 	shapes[0] = Shape();
 	shapes[0].pos = [0,1,2.5];
-	shapes[0].bounds = [1,0.2,10];
+	//shapes[0].bounds = [1,1,1];
 	shapes[0].SetShape();
-	//shapes[1] = Shape();
-	//shapes[1].pos = [0,1,0];
+	shapes[1] = Shape();
+	shapes[1].pos = [0,1,0];
 	
 	//smallShape = Shape();
 	smallShape = MeshShape();
@@ -787,8 +802,7 @@ function OnFrame()
 	if(TranslateConstrain > 0) DrawConstrainLine(); 
 	
 	for (var i = 0; i < len(shapes); i++) {
-		if(curShape == i)
-			shapes[i].DrawSelected();
+		if(curShape == i) shapes[i].DrawSelected();
 		shapes[i].DrawShape();
 	}
 	
