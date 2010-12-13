@@ -19,7 +19,7 @@ SET SCENE_FAR  = 1000;
 #define DELETE_MODE 	5
 #define NUM_MODES 		6
 
-//#define LOWPOLYWORLD
+#define LOWPOLYWORLD
 #define DEBUG
 //#define HIGHPOLY
 // TODO: put your global variables here
@@ -259,9 +259,9 @@ function Shape::DrawShape()
 	for(var i = 0; i < 6; i++)
 	{
 		glTexCoord(0,0); glVertex(corners[faces[i][0]]);
-		glTexCoord(0,1); glVertex(corners[faces[i][1]]);
-		glTexCoord(1,1); glVertex(corners[faces[i][2]]);
-		glTexCoord(1,0); glVertex(corners[faces[i][3]]);
+		glTexCoord(0,2); glVertex(corners[faces[i][1]]);
+		glTexCoord(2,2); glVertex(corners[faces[i][2]]);
+		glTexCoord(2,0); glVertex(corners[faces[i][3]]);
 	}
 	glEnd();
 	
