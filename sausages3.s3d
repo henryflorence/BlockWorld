@@ -68,7 +68,6 @@ var groundTexture;
 var mSelect;
 var tSelect;
 /* Function declarations */
-function CameraMoveMouse();
 function getNewKeyboardEvents();
 function DrawGrid(col, size);
 function joystickMove();
@@ -91,6 +90,7 @@ class Shape
 	var corners;
 	var yStartpos;
 	var pauseCount;
+	var texture;
 	
 	ResetShape();
 	SetShape();
@@ -146,14 +146,6 @@ function MeshShape::SetMesh(file, normalise)
 	newBounds.y = (ObjBounds[4] - ObjBounds[1]) / 2;
 	newBounds.z = (ObjBounds[5] - ObjBounds[2]) / 2;
 	
-	//Shape::bounds = newBounds;
-	
-	//if (normalise) {
-		//cannot manipulate properties of subclass properties directly!
-	//	var oldPos = this.GetPos();
-	//		oldPos.y = 1;	
-	//	this.SetPos(oldPos);
-	//}
 	obj.LinkToMesh(mesh);
 	return newBounds;
 }
@@ -168,6 +160,7 @@ function Shape::Shape()
 	bounds = [1,1,1];
 	corners = Array(8);
 	pauseCount = 0;
+	texture = CVmTexture("ground.jpg");;
 	
 	for(var i = 0; i < 8; i++)
 		corners[i] = Vector(3);
@@ -233,7 +226,7 @@ function Shape::DrawShape()
 	glPushMatrix();
 	glEnable(GL_LIGHTING);
 	
-	SetActiveTexture(groundTexture);
+	SetActiveTexture(texture);
 	glTexEnvf( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE );
 	// when texture area is small, bilinear filter the closest mipmap
 	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
@@ -487,6 +480,7 @@ class TextureSelector
 	var names;
 	var textures;
 	var fileNames;
+	var centres;
 	var rotsDir;
 	var visible;
 	var offset;
@@ -498,7 +492,7 @@ class TextureSelector
 	var rightArrow;
 	var leftArrow;
 	
-	Draw();
+	DrawTextures();
 	PickTexture();
 	UpdateRots();
 };
@@ -587,17 +581,20 @@ function TextureSelector::TextureSelector() {
 	selectedArrow = -1;
 	offset = 0;
 	
+	
 	OutputLN("Texture file exists:",FileExist("textures.txt"));
 	if(FileExist("textures.txt")){
 		var lines = LoadFile("textures.txt");
 		textures = Array(len(lines));
 		names = Array(0);
 		fileNames = Array(0);
+		centres = Array(len(textures));
 		OutputLN("len(lines):",len(lines));
 		foreach(var line in lines) {
 			var tokens = Split(line,",");
 			aadd(names,tokens[0]);
 			aadd(fileNames,tokens[1]);
+			aadd(centres,[0,0,0]);
 			OutputLN(line);
 		}
 		OutputLN("@");
@@ -665,8 +662,88 @@ function MeshSelector::Draw() {
 		leftArrow.draw();	
 	}
 }
+function TextureSelector::DrawTextures() {
+	#ifdef CAVE
+	var centre = CameraGetPosition() + headpos;
+	#else
+	var centre = CameraGetPosition(); // + headpos;
+	#endif
+	
+	centre += VectorRotate(headrot.y,0,1,0,[0,0,-3],false);
+	var lX = VectorRotate(headrot.y,0,1,0,[1,0,0],true);
+	
+	rightArrow.SetPosition(centre + 1.35 * lX);
+	leftArrow.SetPosition(centre - 1.35 * lX);
+	
+	var d = 3;
+	var start = centre;
+	var xinc = 0.6;
+	#ifdef CAVE
+	start += [0,.3,0] - .9 * lX;
+	#else
+	start += [0,.75,0] - .75 * lX;
+	xinc = 0.5;
+	#endif
+	var i = offset;
+	var pos = start;
+	var hs = 0.2 * lX;
+	
+	var vs = 0.2;
+	
+	for(var y = 1; y < 5; y++) {
+		for(var x = 0; x < 4; x++) {
+			glPushMatrix();
+			glTranslate(pos);
+			centres[i] = pos;
+			glEnable(GL_LIGHTING);
+			
+			SetActiveTexture(textures[i]);
+			glTexEnvf( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE );
+			// when texture area is small, bilinear filter the closest mipmap
+			glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+		                 GL_LINEAR_MIPMAP_NEAREST );
+			// when texture area is large, bilinear filter the original
+			glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+		
+			// the texture wraps over at the edges (repeat)
+			glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT );
+			glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT );	
+			
+			glColor(1,0,0);
+			glBegin(GL_QUADS);
+			glTexCoord(0,0); glVertex(-hs - [0,vs,0]);
+			glTexCoord(0,1); glVertex(hs - [0,vs,0]);
+			glTexCoord(1,1); glVertex(hs + [0,vs,0]);
+			glTexCoord(1,0); glVertex(-hs + [0,vs,0]);
+			glEnd();
+			
+			if(i == selectedMesh) {
+				glColor(0,.45,1);
+				glBegin(GL_LINE_LOOP);
+					glVertex(-hs - [0,vs,0]);
+					glVertex(hs - [0,vs,0]);
+					glVertex(hs + [0,vs,0]);
+					glVertex(-hs + [0,vs,0]);
+				glEnd();	
+			}
+			glPopMatrix();
+			if(++i >= len(textures)) break;
+			pos += xinc * lX;
+		}
+		if(i >= len(textures)) break;
+		pos = start;
+		pos.y -= .5 * y;
+	}
+	if(len(textures) > 16) {
+		rightArrow.draw();	
+		leftArrow.draw();	
+	}
+}
 function MeshSelector::UpdateRots() {
 	for(var i=0; i < len(meshes); i++) meshes[i].RotateABS(rotsDir[i],0,1,0);
+}
+function TextureSelector::UpdateRots() {
+	//for(var i=0; i < len(meshes); i++) meshes[i].RotateABS(rotsDir[i],0,1,0);
 }
 function MeshSelector::PickMesh() {
 	var camStartVert = CameraGetPosition() + wandpos;
@@ -704,14 +781,45 @@ function MeshSelector::PickMesh() {
 	offset = offset % len(meshes);
 	if(offset < 0) offset = len(meshes) + offset;
 }	
-
+function TextureSelector::PickTexture() {
+	var camStartVert = CameraGetPosition() + wandpos;
+	var camEndVert = [0,0,-100];
+	var d = 100;
+	static var preSelectedArrow;
+	
+	camEndVert = VectorRotate(wandRot.x,1,0,0,camEndVert,false);
+	camEndVert = VectorRotate(wandRot.y,0,1,0,camEndVert,false);
+	
+	selectedMesh = -1;
+	//LineGL(camStartVert,camEndVert);
+	for(var i = offset; i < len(textures) && i < offset + 16; i++) {
+		//http://mathworld.wolfram.com/Point-LineDistance3-Dimensional.html
+		var posD = modulus((centres[i] - camStartVert) ^ (centres[i] - camEndVert)) / modulus(camEndVert - camStartVert);
+		if(posD < d) { // && i < offset && i < offset + 16) {
+			d = posD;
+			selectedMesh = i; 
+			selected = fileNames[selectedMesh];
+		}
+	}
+	preSelectedArrow = selectedArrow;
+	selectedArrow = -1;
+	
+	var ltArrowD = modulus((leftArrow.GetPosition() - camStartVert) ^ (leftArrow.GetPosition() - camEndVert)) / modulus(camEndVert - camStartVert);
+	var rtArrowD = modulus((rightArrow.GetPosition() - camStartVert) ^ (rightArrow.GetPosition() - camEndVert)) / modulus(camEndVert - camStartVert);
+	if(len(textures) > 16 && ltArrowD < d) { selectedMesh = -1; selectedArrow = 0; d = ltArrowD; }
+	else if(len(textures) > 16 && rtArrowD < d && rtArrowD < 0.3) { selectedMesh = -1; selectedArrow = 1; d = rtArrowD; }
+	
+	if(selectedArrow != preSelectedArrow && selectedArrow > -1) {
+		if(selectedArrow == 0) { outputLN("going left..."); offset -= 16; }
+	 	else { outputLN("going right..."); offset += 16; }
+	}
+	
+	offset = offset % len(textures);
+	if(offset < 0) offset = len(textures) + offset;
+}
 function OnDownload()
 {
 	// TODO: download your resources here
-	//#ifdef CAVE
-	//FileDownload("sceneData.zip");
-	//FileDownload("shapes.zip");
-	//#endif
 }
 
 
@@ -831,7 +939,6 @@ function OnFrame()
  	joystickMove();
 	
 	/* manage camera */
-	CameraMoveMouse();
 	
 	SceneBegin();
 	SetClearColor(1,1,1);
@@ -857,14 +964,19 @@ function OnFrame()
 	glRotate(-worldRotation,0,1,0);
 	glTranslate(-CameraPos);
 	
-	smallShape.DrawShape();
-	iconObj.SetPosition(smallShape.pos + [0.04 * sin(iconRads),0.05,0.04 * cos(iconRads)]);
-	iconObj.Draw();
 	if (mSelect.visible) {
 		mSelect.Draw();
 		mSelect.PickMesh();
 		mSelect.UpdateRots();
+	} else if (tSelect.visible) {
+		tSelect.DrawTextures();
+		tSelect.PickTexture();
+		tSelect.UpdateRots();
 	}
+	
+	smallShape.DrawShape();
+	iconObj.SetPosition(smallShape.pos + [0.04 * sin(iconRads),0.05,0.04 * cos(iconRads)]);
+	iconObj.Draw();
 	
 	PositionLights(CameraPos.x0z);
 	skyDome.SetPosition(CameraPos.x0z);
@@ -968,67 +1080,6 @@ function OnTimer()
 	}
 	iconObj.Rotate(0.3,iconTumpleAxis);
 }
-// Camera manager (using mouse)
-function CameraMoveMouse()
-{
-	static var InMouseR = false, InMouseL = false;				
-	static var PrecX = 0, PrecY = 0;			
-	// Change these values to modify the mouse sensitivity
-	var TR_SENSITIVITY  = 0.0001 ;//* SceneScale;
-	var ROT_SENSITIVITY = 0.01;
-	// Mouse manager
-	if(Mouse.ButtonL && !Mouse.ButtonR)
-	{
-		//====  Left Button: Camera rotation  ====//
-		if (InMouseL)
-		{			
-			CameraRotate(( Mouse.X-PrecX)*ROT_SENSITIVITY,0,1,0);
-			CameraRotateABS((Mouse.Y-PrecY)*ROT_SENSITIVITY,1,0,0);		
-		}
-		else
-		{
-			PrecX = Mouse.X;
-			PrecY = Mouse.Y;
-		}
-		InMouseL = true;
-		InMouseR = false;
-	}
-	else
-	if(Mouse.ButtonR)
-	{
-	
-		//====  Right Button: Camera translation  ====//
-		if (InMouseR)
-		{
-			var CameraMatrix = CameraGetMatrix();
-			var CameraPos = CameraGetPosition();
-			if (!Mouse.ButtonL) 
-			//====  Translation on X and Z axis ====//
-				CameraPos += CameraGetZAxis() * (Mouse.y-PrecY)*TR_SENSITIVITY + CameraGetXAxis() * (Mouse.X- PrecX)*TR_SENSITIVITY;
-			else
-			//====  Right + Left Button: Translation on Y axis ====//
-				CameraPos -= CameraGetYAxis() * (Mouse.y-PrecY)*TR_SENSITIVITY;
-			
-			CameraSetPosition(CameraPos);		
-		}
-		else
-		{
-			PrecX = Mouse.X;
-			PrecY = Mouse.Y;
-		}
-		InMouseR = true;
-		InMouseL = false;
-	}	
-	else
-	{
-		InMouseR = false;
-		InMouseL = false;
-	}
-	/*
-	var CameraPos = CameraGetPosition();
-	var CameraDir = CameraGetDirection();*/
-}
-
 
 function OnExit()
 {
@@ -1153,6 +1204,9 @@ function joystickMove()
 	var TR_SENSITIVITY = 0.01;
 	mSelect.preVisible = mSelect.visible;
 	mSelect.visible = false;
+	
+	tSelect.preVisible = tSelect.visible;
+	tSelect.visible = false;
 	if(b[5]==1 && curShape > -1 && opMode < NUM_MODES) {
 		var dX = WandRot.x - PrecSphereX;
 		var dY = WandRot.y - PrecSphereY;			
@@ -1188,6 +1242,9 @@ function joystickMove()
 		} else if (b[5]==1 && opMode == OBJECT_MODE && curShape > -1) {
 			//OutputLN("mesh Select");
 			mSelect.visible = true;
+		} else if (b[5]==1 && opMode == TEXTURE_MODE && curShape > -1) {
+			//OutputLN("mesh Select");
+			tSelect.visible = true;
 		} else if (curShape >-1 && opMode == DELETE_MODE) {
 			if (b[5]==1 && lastButtons/32%2==0) {
 				OutputLN("Deleting ",curShape);
@@ -1208,6 +1265,12 @@ function joystickMove()
 			shapes[curShape] = MeshShape(shapes[curShape]);
 			shapes[curShape].bounds = shapes[curShape].SetMesh(mSelect.selected, true);
 			shapes[curShape].pos = pos;
+		}
+	} else if (opMode == TEXTURE_MODE && curShape > -1) {
+		if (tSelect.preVisible && !tSelect.Visible && tSelect.selectedMesh > -1) {
+			OutputLN(tSelect.selected);
+			SetLocalDir("\\textures\\");
+			shapes[curShape].texture = CVmTexture(tSelect.selected);
 		}
 	}
 	lastButtons = buts;
