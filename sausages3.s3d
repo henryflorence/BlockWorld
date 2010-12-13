@@ -20,7 +20,7 @@ SET SCENE_FAR  = 1000;
 #define NUM_MODES 		6
 
 //#define LOWPOLYWORLD
-//#define DEBUG
+#define DEBUG
 //#define HIGHPOLY
 // TODO: put your global variables here
 //#define CAVE
@@ -58,10 +58,6 @@ var iconRads = 0;
 var iconObj;
 var iconTumpleAxis;
 
-/* Music */
-var soundEffect;
-var testEffect;
-
 /* Light globals */
 var skyLights;
 var Light1;
@@ -70,6 +66,7 @@ var PosL = [0.0, 10.0, 10.0];	// default light position
 var groundTexture;
 
 var mSelect;
+var tSelect;
 /* Function declarations */
 function CameraMoveMouse();
 function getNewKeyboardEvents();
@@ -94,7 +91,6 @@ class Shape
 	var corners;
 	var yStartpos;
 	var pauseCount;
-	var impactEffect;
 	
 	ResetShape();
 	SetShape();
@@ -146,19 +142,18 @@ function MeshShape::SetMesh(file, normalise)
 	mesh.CenterBoundingBox();
 	var ObjBounds = mesh.GetBoundingBox();
 	var newBounds = Vector(3);
-	OutputLN(mesh.GetBoundingBox());
 	newBounds.x = (ObjBounds[3] - ObjBounds[0]) / 2;
 	newBounds.y = (ObjBounds[4] - ObjBounds[1]) / 2;
 	newBounds.z = (ObjBounds[5] - ObjBounds[2]) / 2;
-	OutputLN(newBounds);
+	
 	//Shape::bounds = newBounds;
 	
-	if (normalise) {
+	//if (normalise) {
 		//cannot manipulate properties of subclass properties directly!
-		var oldPos = this.GetPos();
-		oldPos.y = 1;	
-		this.SetPos(oldPos);
-	}
+	//	var oldPos = this.GetPos();
+	//		oldPos.y = 1;	
+	//	this.SetPos(oldPos);
+	//}
 	obj.LinkToMesh(mesh);
 	return newBounds;
 }
@@ -178,10 +173,6 @@ function Shape::Shape()
 		corners[i] = Vector(3);
 	
 	ResetShape();
-	
-	SetLocalDir();
-	impactEffect = CVmVRAWav();
-	impactEffect.Load("/sound/DropEffect.wav");
 }
 function MeshShape::MeshShape(oldShape)
 {
@@ -225,34 +216,24 @@ function MeshShape::DrawShape()
 	obj.setRotation(rot.x, [1,0,0]);
 	obj.Rotate(rot.y, [0,1,0]);
 	obj.Rotate(rot.z, [0,0,1]);
-	obj.SetScale(bounds);
+	obj.SetScale([bounds.x*2,bounds.y,bounds.z*2]);
 	obj.Draw();
-	
-	glPushMatrix();
-	glTranslate(pos);
-
-	glBegin(GL_QUADS);
-	glVertex(corners[faces[3][0]]);
-	glVertex(corners[faces[3][3]]);
-	glVertex(corners[faces[3][2]]);
-	glVertex(corners[faces[3][1]]);
-	glEnd();
-	
-	glPopMatrix();
 }
 function MeshShape::DrawSelected() 
 {
 	obj.DrawBoundingBox();
+	Shape::this.DrawSelected();
 }
 function Shape::DrawShape()
 {
+	//glPushAttrib(GL_LIGHTING_BIT | GL_LINE_BIT | GL_CURRENT_BIT);
 	//glDisable(GL_LIGHTING);
 	//glLoadIdentity();
+	
 	glPushMatrix();
 	glEnable(GL_LIGHTING);
+	
 	SetActiveTexture(groundTexture);
-	glDisable(GL_COLOR_MATERIAL);
-	glCOlor(1,1,1);
 	glTexEnvf( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE );
 	// when texture area is small, bilinear filter the closest mipmap
 	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
@@ -265,12 +246,13 @@ function Shape::DrawShape()
 	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT );	
 	
 	glTranslate(pos);
-	
+
 	//left,top,right,bottom,front,back
 	var sU = {bounds.y,bounds.x,bounds.y,bounds.x,bounds.x,bounds.x};
 	var SV = {bounds.z,bounds.z,bounds.z,bounds.z,bounds.y,bounds.y};
 	glBegin(GL_QUADS);
-	for(var i = 0; i < 6; i++) {
+	for(var i = 0; i < 6; i++)
+	{
 		glTexCoord(0,0); glVertex(corners[faces[i][0]]);
 		glTexCoord(0,2*sV[i]); glVertex(corners[faces[i][1]]);
 		glTexCoord(2*sU[i],2*sV[i]); glVertex(corners[faces[i][2]]);
@@ -285,19 +267,33 @@ function Shape::DrawSelected()
 {
 	glPushAttrib(GL_LIGHTING_BIT | GL_LINE_BIT | GL_CURRENT_BIT);
 	
-	glColor(0,.23,.45);
-	glLineWidth(2);
+	glPushMatrix();
+	glColor(0,.45,1);
+	glLineWidth(4);
 	glDisable(GL_LIGHTING);
 	
-	var xs = {-bounds.x,bounds.x};
-	var zs = {bounds.z,bounds.z};
+	var xs = {-bounds.x,bounds.x,bounds.x,-bounds.x};
+	var zs = {bounds.z,bounds.z,-bounds.z,-bounds.z};
 	
-	glTranslate(pos);
-	var i = 0;
-	glBegin(GL_LINES);
+	glTranslate(pos+[0,bounds.y,0]);
+	glBegin(GL_LINE_LOOP);
+	for(var i = 0; i < 4; i++)
 		glVertex(xs[i],0,zs[i]);
-		glVertex(xs[i+1],0,zs[i+1]);
 	glEnd();
+	glTranslate([0,-2 * bounds.y,0]);
+	glBegin(GL_LINE_LOOP);
+	for(var i = 0; i < 4; i++)
+		glVertex(xs[i],0,zs[i]);
+	glEnd();
+	glTranslate([0,bounds.y,0]);
+	glBegin(GL_LINES);
+	for(var i = 0; i < 4; i++) {
+		glVertex(xs[i],-bounds.y,zs[i]);
+		glVertex(xs[i],bounds.y,zs[i]);
+	}
+	glEnd();
+	
+	glPopMatrix();
 	glPopAttrib();
 }
 function Shape::FloorBounds() {
@@ -417,7 +413,6 @@ function Shape::CheckValues( bound, lt, olt, ort, bt, tp, obt, otp, ft, bk, oft,
 }
 function Shape::Gravity()
 {
-	
 	static var dS = 0;
 	if(pauseCount > 0) pauseCount--;
 	if (curShape > -1 &&((b[5] == 1 && shapes[curShape] == this) || pauseCount > 0)) return;
@@ -436,17 +431,10 @@ function Shape::Gravity()
 	
 	var oldY = pos.y;
 	pos.y -= sqrt(2*dS);
-	if(GetBottom() < bottomBound){
-		if(dS > 0.1 && !impactEffect.isPlaying()) {
-			OutputLN(sprintf("impact from %i",curShape)); impactEffect.play();
-		}	
-	  SetBottom(bottomBound);
-	}
+	if(GetBottom() < bottomBound)  SetBottom(bottomBound);
+	
 	dS = oldY - pos.y;
-
 }
-
-
 function Shape::SetLeft(lt) {
 	pos.x = lt + bounds.x;
 }
@@ -494,6 +482,26 @@ function Shape::DistanceToLine(x1, x2) {
 	return modulus((pos - x1) ^ (pos - x2)) / modulus(x2 - x1);
 }
 
+class TextureSelector
+{
+	var names;
+	var textures;
+	var fileNames;
+	var rotsDir;
+	var visible;
+	var offset;
+	var selected;
+	var selectedMesh;
+	var selectedArrow;
+	var preVisible;
+	
+	var rightArrow;
+	var leftArrow;
+	
+	Draw();
+	PickTexture();
+	UpdateRots();
+};
 class MeshSelector
 {
 	var meshes;
@@ -553,7 +561,7 @@ function MeshSelector::MeshSelector() {
 	for(var i = 0; i < len(fileNames); i++) {
 		var mesh = CVmNewMesh(fileNames[i]);
 		#ifdef CAVE
-		mesh.Normalize(0.5);
+		mesh.Normalize(0.1);
 		#else
 		mesh.Normalize(0.5);
 		#endif
@@ -573,7 +581,43 @@ function MeshSelector::MeshSelector() {
 	leftArrow.LinkToMesh(mesh);
 	leftArrow.SetScale([.2,.2,.2]);
 }
-
+function TextureSelector::TextureSelector() {
+	visible = false;
+	selectedMesh = -1;
+	selectedArrow = -1;
+	offset = 0;
+	
+	OutputLN("Texture file exists:",FileExist("textures.txt"));
+	if(FileExist("textures.txt")){
+		var lines = LoadFile("textures.txt");
+		textures = Array(len(lines));
+		names = Array(0);
+		fileNames = Array(0);
+		OutputLN("len(lines):",len(lines));
+		foreach(var line in lines) {
+			var tokens = Split(line,",");
+			aadd(names,tokens[0]);
+			aadd(fileNames,tokens[1]);
+			OutputLN(line);
+		}
+		OutputLN("@");
+		rotsDir = Array(0);
+		for(var i = 0; i < len(fileNames); i++) {
+			textures[i] = CVmTexture(fileNames[i]);
+			aadd(rotsDir,[Rand(1),Rand(1),Rand(1)]);
+		}
+	} 
+	
+	var mesh = CVmNewMesh("..\\rightArrow.aam");
+	rightArrow = CVmObj();
+	rightArrow.LinkToMesh(mesh);
+	rightArrow.SetScale([.2,.2,.2]);
+	
+	mesh = CVmNewMesh("..\\leftArrow.aam");
+	leftArrow = CVmObj();
+	leftArrow.LinkToMesh(mesh);
+	leftArrow.SetScale([.2,.2,.2]);
+}
 function MeshSelector::Draw() {
 	
 	#ifdef CAVE
@@ -606,21 +650,23 @@ function MeshSelector::Draw() {
 			meshes[i].SetPosition(pos);
 			meshes[i].draw();
 			//Text Drawing
-			//var text =  CVmText(names[i]);
+			//var text = CVmText(names[i]);
 			//text.SetPosition(pos.x,pos.y-.4,pos.z);
 			//
-			if(++i >= len(meshes)) break; 
+			if(++i >= len(meshes)) break;
 			pos += xinc * lX;
 		}
 		if(i >= len(meshes)) break;
 		pos = start;
 		pos.y -= .5 * y;
 	}
-	rightArrow.draw();
-	leftArrow.draw();	
+	if(len(meshes) > 16) {
+		rightArrow.draw();	
+		leftArrow.draw();	
+	}
 }
 function MeshSelector::UpdateRots() {
-	//for(var i=0; i < len(meshes); i++) meshes[i].RotateABS(rotsDir[i],0,1,0);
+	for(var i=0; i < len(meshes); i++) meshes[i].RotateABS(rotsDir[i],0,1,0);
 }
 function MeshSelector::PickMesh() {
 	var camStartVert = CameraGetPosition() + wandpos;
@@ -647,8 +693,8 @@ function MeshSelector::PickMesh() {
 	
 	var ltArrowD = modulus((leftArrow.GetPosition() - camStartVert) ^ (leftArrow.GetPosition() - camEndVert)) / modulus(camEndVert - camStartVert);
 	var rtArrowD = modulus((rightArrow.GetPosition() - camStartVert) ^ (rightArrow.GetPosition() - camEndVert)) / modulus(camEndVert - camStartVert);
-	if(ltArrowD < d) { selectedMesh = -1; selectedArrow = 0; d = ltArrowD; }
-	else if(rtArrowD < d && rtArrowD < 0.3) { selectedMesh = -1; selectedArrow = 1; d = rtArrowD; }
+	if(len(meshes) > 16 && ltArrowD < d) { selectedMesh = -1; selectedArrow = 0; d = ltArrowD; }
+	else if(len(meshes) > 16 && rtArrowD < d && rtArrowD < 0.3) { selectedMesh = -1; selectedArrow = 1; d = rtArrowD; }
 	
 	if(selectedArrow != preSelectedArrow && selectedArrow > -1) {
 		if(selectedArrow == 0) { outputLN("going left..."); offset -= 16; }
@@ -679,8 +725,8 @@ function OnInit(params)
 		
 		
 	/* background music */
-	//var music = CVmMMMp3();
-	//music.Load("bgm.mp3",true);
+	var music = CVmMMMp3();
+	music.Load("bgm.mp3",true);
 	//music.Play(true);
 
 	shapes = Array(2);
@@ -689,8 +735,6 @@ function OnInit(params)
 	
 	shapes[0] = Shape();
 	shapes[0].pos = [0,1,2.5];
-	//shapes[0].bounds = [1,1,1];
-	shapes[0].SetShape();
 	shapes[1] = Shape();
 	shapes[1].pos = [0,1,0];
 	
@@ -733,6 +777,8 @@ function OnInit(params)
 	SetLocalDir("\\shapes\\");
 	//#endif
 	mSelect = MeshSelector();
+	SetLocalDir("\\textures\\");
+	tSelect = TextureSelector();
 	//#ifndef CAVE
 	SetLocalDir();
 	//#endif
@@ -791,7 +837,7 @@ function OnFrame()
 	SetClearColor(1,1,1);
 	//SceneEnableFog(1,100,[0,0,0]);
 	glEnable(GL_NORMALIZE);
-	
+		
 	var CameraPos = CameraGetPosition() + headpos;
 	glTranslate(CameraPos);
 	glRotate(worldRotation,0,1,0);
@@ -802,7 +848,8 @@ function OnFrame()
 	if(TranslateConstrain > 0) DrawConstrainLine(); 
 	
 	for (var i = 0; i < len(shapes); i++) {
-		if(curShape == i) shapes[i].DrawSelected();
+		if(curShape == i)
+			shapes[i].DrawSelected();
 		shapes[i].DrawShape();
 	}
 	
@@ -1096,8 +1143,8 @@ function joystickMove()
 		CameraSetPosition(CameraPos);
 	}
 	
-	startVert = CameraPos + headpos + [0,0.1,0] + VectorRotate(-worldRotation, 0, 1, 0, wandpos - headpos, false);
-	smallShape.pos = CameraPos + wandpos + [0,0.1,0]; //headpos + VectorRotate(-worldRotation, 0, 1, 0, wandpos - headpos, false);
+	startVert = CameraPos + headpos + VectorRotate(-worldRotation, 0, 1, 0, wandpos - headpos, false);
+	smallShape.pos = CameraPos + wandpos; //headpos + VectorRotate(-worldRotation, 0, 1, 0, wandpos - headpos, false) + [0,0.1,0];
 	smallShape.rot = wandrot;
 	//smallShape.rot.y -= worldRotation;
 	//smallShape.rot.x -= worldRotation;
@@ -1156,13 +1203,11 @@ function joystickMove()
 	if(opMode == OBJECT_MODE && curShape > -1) {
 		if (mSelect.preVisible && !mSelect.Visible && mSelect.selectedMesh > -1) {
 			OutputLN(mSelect.selected);
+			SetLocalDir("\\shapes\\");
 			var pos = shapes[curShape].pos;
 			shapes[curShape] = MeshShape(shapes[curShape]);
-			SetLocalDir("\\shapes\\");
 			shapes[curShape].bounds = shapes[curShape].SetMesh(mSelect.selected, true);
 			shapes[curShape].pos = pos;
-			shapes[curShape].SetShape();
-			OutputLN(shapes[curShape].bounds);
 		}
 	}
 	lastButtons = buts;
@@ -1172,17 +1217,12 @@ function joystickMove()
 function LoadIcon() {
 	SetLocalDir();
 	var iconMesh;
-	soundEffect = CVmVRAWav();
-	soundEffect.Load("/sound/Select.wav");
-	soundEffect.setVolume(1.5);
-	soundEffect.Play(); 
-	
 	switch(opMode) {
 		case TRANSLATE_MODE:
 			iconMesh = CVmNewMesh("icons\\translate.aam");
 			break;
 		case ROTATE_MODE:
-			iconMesh = CVmNewMesh("icons\\rotate.aam"); 
+			iconMesh = CVmNewMesh("icons\\rotate.aam");
 			break;
 		case OBJECT_MODE:
 			iconMesh = CVmNewMesh("icons\\object.aam");
