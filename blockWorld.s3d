@@ -1,0 +1,1415 @@
+/* Include s3d symbols */
+#include <Script3d.h>
+//#include <Camera.s3d.h>
+
+/* Set global scene parameters */
+SET SCENE_FOV  = 60;
+SET SCENE_NEAR = 0.5;
+SET SCENE_FAR  = 1000;
+
+
+#define LOOK 1
+#define MOVE 2
+
+#define TRANSLATE_MODE 	0
+#define SCALE_MODE 		1 
+#define ROTATE_MODE 	2
+#define OBJECT_MODE 	3
+#define TEXTURE_MODE 	4
+#define DELETE_MODE 	5
+#define NUM_MODES 		6
+
+#define LOWPOLYWORLD
+#define DEBUG
+//#define HIGHPOLY
+// TODO: put your global variables here
+//#define CAVE
+
+/* Camera globals */
+//#ifdef CAVE
+var CamPos = [-10, 1.1, 0]; 	// camera position
+
+
+var shapes;
+var curShape = 0;
+var MAXBOUND = 50;
+var dP = 0.000001;
+var scaling = false;
+var joyMode = MOVE;
+var opMode = TRANSLATE_MODE;
+var lastButtons = 0;
+var worldRotation = 90;
+var pointer = [0.5,0.5,0];
+var smallShape;
+var skyDome;
+var furnitureObj;
+var furnitureMesh;
+var endVert = Vector(3);
+var startVert = Vector(3);
+var wandRot = [0,0,0];
+var headrot = [0,0,0];
+var wandpos = [0,0,0];
+var b = Array(16);
+var kb = Array(16);
+var headpos = [1.5,1.8,1.5];
+var TranslateConstrain = 0;
+//mode icon
+var iconRads = 0;
+var iconObj;
+var iconTumpleAxis;
+
+/* Light globals */
+var skyLights;
+var Light1;
+var Light2;
+var PosL = [0.0, 10.0, 10.0];	// default light position
+var groundTexture;
+
+var mSelect;
+var tSelect;
+/* Function declarations */
+function getNewKeyboardEvents();
+function DrawGrid(col, size);
+function joystickMove();
+function DrawLine(visible);
+function PickShape();
+function PositionLights(centre);
+function DrawGroundPlane(centre);
+function LoadIcon();
+function LoadPointer();
+function TumpleIcon();
+function DrawConstrainLine();
+function LineGL(a,b);
+
+class Shape 
+{
+	var faces;
+	var pos;
+	var rot;
+	var bounds;
+	var corners;
+	var yStartpos;
+	var pauseCount;
+	var texture;
+	
+	ResetShape();
+	SetShape();
+	SetShapeFromValues(lt,rt,btm,top,fnt,bk);
+	DrawShape();
+	CalcBounds(scale);
+	CheckBounds();
+	FloorBounds();
+	CheckValues( bound, lt, olt, ort, bt, tp, obt, otp, ft, bk, oft, obk );
+	DistanceToLine(x1, x2);
+	Gravity();
+	DrawSelected();
+	
+	GetLeft();
+	GetRight();
+	GetTop();
+	GetBottom();
+	GetFront();
+	GetBack();
+	
+	SetLeft(lt);
+	SetRight(rt);
+	SetBottom(bt);
+	setTop(tp);
+	SetFront(ft);
+	SetBack(bk);
+	
+	GetPos();
+	SetPos(newPos);
+};
+
+class MeshShape : Shape
+{
+	var mesh;
+	var tex;
+	var obj;
+	
+	SetMesh(file, normalise);
+	DrawShape();
+	Clone(oldShape);
+	DrawSelected();
+};
+function MeshShape::SetMesh(file, normalise)
+{
+	mesh = CVmNewMesh(file);
+	obj = CVmObj();
+	if(normalise) mesh.Normalize(2);
+	mesh.CenterBoundingBox();
+	var ObjBounds = mesh.GetBoundingBox();
+	var newBounds = Vector(3);
+	var objBounds1 = obj.LocalToWorld(ObjBounds.xyz);
+	var objBounds2 = obj.LocalToWorld([ObjBounds[3],ObjBounds[4],ObjBounds[5]]);
+	newBounds.x = (ObjBounds2.x - ObjBounds1.x) / 2;
+	newBounds.y = (ObjBounds2.y - ObjBounds1.y) / 2;
+	newBounds.z = (ObjBounds2.z - ObjBounds1.z) / 2;
+	
+	//mesh.Scale([1,2,2]);
+	obj.LinkToMesh(mesh);
+	return newBounds;
+}
+function Shape::Shape()
+{
+	faces = {  /* Vertex indices for the 6 faces of a cube. */
+	  {0, 1, 2, 3}, {3, 2, 6, 7}, {7, 6, 5, 4},
+	  {4, 5, 1, 0}, {5, 6, 2, 1}, {7, 4, 0, 3} };
+	 
+	pos = [0,20,0];
+	rot = [0,0,0];
+	bounds = [1,1,1];
+	corners = Array(8);
+	pauseCount = 0;
+	texture = CVmTexture("ground.jpg");;
+	
+	for(var i = 0; i < 8; i++)
+		corners[i] = Vector(3);
+	
+	ResetShape();
+}
+function MeshShape::MeshShape(oldShape)
+{
+	Shape::pos = oldShape.pos;
+	Shape::rot = oldShape.rot;
+	Shape::bounds = oldShape.bounds;
+	Shape::corners = oldShape.corners;
+	Shape::faces = oldShape.faces;
+}
+function Shape::ResetShape()
+{
+	bounds = [1,1,1];
+	SetShape();
+}
+function Shape::SetShape() {
+	SetShapeFromValues(-bounds.x,bounds.x,-bounds.y,bounds.y,-bounds.z,bounds.z);
+}
+function Shape::SetShapeFromValues(lt,rt,btm,top,fnt,bk) 
+{
+	//left face
+	corners[0].x = corners[1].x = corners[2].x = corners[3].x = lt;
+	
+	//right face
+	corners[4].x = corners[5].x = corners[6].x = corners[7].x = rt;
+	
+	//bottom
+	corners[0].y = corners[1].y = corners[4].y = corners[5].y = btm;
+	
+	//top
+	corners[2].y = corners[3].y = corners[6].y = corners[7].y = top;
+	
+	//back - left or right handedness??
+	corners[0].z = corners[3].z = corners[4].z = corners[7].z = fnt;
+	
+	//front
+	corners[1].z = corners[2].z = corners[5].z = corners[6].z = bk;
+}
+function MeshShape::DrawShape()
+{
+	obj.setPosition(pos);
+	obj.setRotation(rot.x, [1,0,0]);
+	obj.Rotate(rot.y, [0,1,0]);
+	obj.Rotate(rot.z, [0,0,1]);
+	obj.SetScale([bounds.x,bounds.y,bounds.z]);
+	obj.Draw();
+}
+function MeshShape::DrawSelected() 
+{
+	obj.DrawBoundingBox();
+	Shape::this.DrawSelected();
+}
+function Shape::DrawShape()
+{
+	//glPushAttrib(GL_LIGHTING_BIT | GL_LINE_BIT | GL_CURRENT_BIT);
+	//glDisable(GL_LIGHTING);
+	//glLoadIdentity();
+	
+	glPushMatrix();
+	glEnable(GL_LIGHTING);
+	
+	SetActiveTexture(texture);
+	glTexEnvf( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE );
+	// when texture area is small, bilinear filter the closest mipmap
+	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                 GL_LINEAR_MIPMAP_NEAREST );
+	// when texture area is large, bilinear filter the original
+	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+
+	// the texture wraps over at the edges (repeat)
+	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT );
+	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT );	
+	
+	glTranslate(pos);
+
+	//left,top,right,bottom,front,back
+	var sU = {bounds.y,bounds.x,bounds.y,bounds.x,bounds.x,bounds.x};
+	var SV = {bounds.z,bounds.z,bounds.z,bounds.z,bounds.y,bounds.y};
+	glBegin(GL_QUADS);
+	for(var i = 0; i < 6; i++)
+	{
+		glTexCoord(0,0); glVertex(corners[faces[i][0]]);
+		glTexCoord(0,2*sV[i]); glVertex(corners[faces[i][1]]);
+		glTexCoord(2*sU[i],2*sV[i]); glVertex(corners[faces[i][2]]);
+		glTexCoord(2*sU[i],0); glVertex(corners[faces[i][3]]);
+	}
+	glEnd();
+	
+	glPopMatrix();
+	//glPopAttrib();	
+}
+function Shape::DrawSelected() 
+{
+	glPushAttrib(GL_LIGHTING_BIT | GL_LINE_BIT | GL_CURRENT_BIT);
+	
+	glPushMatrix();
+	glColor(0,.45,1);
+	glLineWidth(4);
+	glDisable(GL_LIGHTING);
+	
+	var xs = {-bounds.x,bounds.x,bounds.x,-bounds.x};
+	var zs = {bounds.z,bounds.z,-bounds.z,-bounds.z};
+	
+	glTranslate(pos+[0,bounds.y,0]);
+	glBegin(GL_LINE_LOOP);
+	for(var i = 0; i < 4; i++)
+		glVertex(xs[i],0,zs[i]);
+	glEnd();
+	glTranslate([0,-2 * bounds.y,0]);
+	glBegin(GL_LINE_LOOP);
+	for(var i = 0; i < 4; i++)
+		glVertex(xs[i],0,zs[i]);
+	glEnd();
+	glTranslate([0,bounds.y,0]);
+	glBegin(GL_LINES);
+	for(var i = 0; i < 4; i++) {
+		glVertex(xs[i],-bounds.y,zs[i]);
+		glVertex(xs[i],bounds.y,zs[i]);
+	}
+	glEnd();
+	
+	glPopMatrix();
+	glPopAttrib();
+}
+function Shape::FloorBounds() {
+	if(bounds.x < 0.01) bounds.x = 0.01;
+	else if(bounds.x > 10) bounds.x = 10;
+	
+	if(bounds.y < 0.01) bounds.y = 0.01;
+	else if(bounds.y > 10) bounds.y = 10;
+	
+	if(bounds.z < 0.01) bounds.z = 0.01;
+	else if(bounds.z > 10) bounds.z = 10;
+}
+function Shape::CalcBounds(scale) {
+	bounds.x = bounds.x * scale.x;
+	bounds.y = bounds.y * scale.y;
+	bounds.z = bounds.z * scale.z; 
+	
+	//bounds.x = bounds.x > MAXBOUND ? MAXBOUND : bounds.x;
+	//bounds.y = bounds.y > MAXBOUND / 2 ? MAXBOUND / 2: bounds.y;
+	//bounds.z = bounds.z > MAXBOUND ? MAXBOUND : bounds.z;
+	
+	FloorBounds();
+	SetShape();
+}
+function Shape::CheckBounds() {
+	//ground plane
+	//if(GetBottom() < 0)  pos.y -= pos.y - bounds.y; 
+	
+	var leftBound = -MAXBOUND;
+	var bottomBound = 0;
+	var frontBound = -MAXBOUND;
+	
+	var rightBound = MAXBOUND;
+	var topBound = MAXBOUND;
+	var backBound = MAXBOUND;
+
+	// 'jiggle it a little' - removes some edge cases
+	pos.x += dP;
+	pos.y += dP;
+	pos.z += dP;
+	
+	foreach(var s in shapes) {
+		if(s == this) continue;
+		if(s.GetRight() > leftBound)
+			leftBound = CheckValues( leftBound, GetLeft(), s.GetLeft(), s.GetRight(), GetBottom() + 0.15, GetTop() - 0.15, 
+								s.GetBottom(), s.GetTop(), GetFront() + 0.15, GetBack() - 0.15, s.GetFront(), s.GetBack());
+		if(s.GetLeft() < rightBound)
+			rightBound = -CheckValues( -rightBound, -GetRight(), -s.GetRight(), -s.GetLeft(), GetBottom() + 0.15, GetTop() - 0.15,
+								s.GetBottom(), s.GetTop(), GetFront() + 0.15, GetBack() - 0.15, s.GetFront(), s.GetBack());
+		if(s.GetTop() > bottomBound)
+			bottomBound = CheckValues( bottomBound, GetBottom(), s.GetBottom(), s.GetTop(), GetLeft() + 0.15, GetRight() - 0.15, 
+								s.GetLeft(), s.GetRight(), GetFront() + 0.15, GetBack() - 0.15, s.GetFront(), s.GetBack());
+		if(s.GetBottom() < topBound)
+			topBound = -CheckValues( -topBound, -GetTop(), -s.GetTop(), -s.GetBottom(), GetLeft() + 0.15, GetRight() - 0.15, 
+								s.GetLeft(), s.GetRight(), GetFront() + 0.15, GetBack() - 0.15, s.GetFront(), s.GetBack());
+		if(s.GetFront() > frontBound)
+			frontBound = CheckValues( frontBound, GetFront(), s.GetFront(), s.GetBack(), GetLeft() + 0.15, GetRight() - 0.15, 
+								s.GetLeft(), s.GetRight(), GetBottom() + 0.15, GetTop() - 0.15, s.GetBottom(), s.GetTop());
+		if(s.GetBack() < backBound)
+			backBound = -CheckValues( -backBound, -GetBack(), -s.GetBack(), -s.GetFront(), GetLeft() + 0.15, GetRight() - 0.15, 
+								s.GetLeft(), s.GetRight(), GetBottom() + 0.15, GetTop() - 0.15, s.GetBottom(), s.GetTop());					
+	}	
+	
+	// jiggle it back
+	pos.x -= dP;
+	pos.y -= dP;
+	pos.z -= dP;
+	
+	if(opMode == SCALE_MODE) {
+		if(GetLeft() < leftBound && GetRight() > rightBound) {
+			bounds.x = (rightBound - leftBound) / 2;
+			SetShape();
+		} else if(GetLeft() < leftBound) SetLeft(leftBound);
+		else if(GetRight() > rightBound) SetRight(rightBound);
+		
+		
+		if(GetBottom() < bottomBound && GetTop() > topBound) {
+			bounds.y = (topBound - bottomBound) / 2;
+			SetShape();
+		} else if(GetBottom() < bottomBound) SetBottom(bottomBound);
+		else if(GetTop() > topBound) SetTop(topBound);
+		
+		if(GetFront() < frontBound && GetBack() > backBound) {
+			bounds.z = (backBound - frontBound - 0.15) / 2;
+			SetShape();
+		} else if(GetFront() < frontBound) SetFront(frontBound);
+		else if(GetBack() > backBound) SetBack(backBound);
+	} else {
+		if(GetLeft() < leftBound) SetLeft(leftBound);
+		else if(GetRight() > rightBound) SetRight(rightBound);
+		
+		if(GetBottom() < bottomBound) SetBottom(bottomBound);
+		else if(GetTop() > topBound) SetTop(topBound);
+		
+		if(GetFront() < frontBound) SetFront(frontBound);
+		else if(GetBack() > backBound) SetBack(backBound);
+	}
+	
+	FloorBounds();
+}
+function Shape::CheckValues( bound, lt, olt, ort, bt, tp, obt, otp, ft, bk, oft, obk )
+{
+	if(	//check if the left face is inside other cube
+		olt < lt && ort > lt
+		//check if the cubes overlap in the vertical direction: 3 cases
+		//bottom of this between top and bottom of other
+		&& ((otp > bt && obt < bt)
+		//top of this between top and bottom of other
+		|| (otp > tp && obt < tp)
+		//top and bottom of other inside this
+		|| (otp < tp && obt > bt))
+		//the same 3 cases for front and back
+		&& ((oft < ft && obk > ft) || (oft < bk && obk > bk) || (obk < bk && oft > ft))) 	
+			bound = ort;
+
+	return bound;
+}
+function Shape::Gravity()
+{
+	static var dS = 0;
+	if(pauseCount > 0) pauseCount--;
+	if (curShape > -1 &&((b[5] == 1 && shapes[curShape] == this) || pauseCount > 0)) return;
+
+	//switch this off and watch them wobble!
+	pos.y -= 0.1;
+	var bottomBound = 0;
+	foreach(var s in shapes) {
+			bottomBound = CheckValues( bottomBound, GetBottom(), s.GetBottom(), s.GetTop(), GetLeft() + 0.15, GetRight() - 0.15, 
+								s.GetLeft(), s.GetRight(), GetFront() + 0.15, GetBack() - 0.15, s.GetFront(), s.GetBack());
+	}
+	pos.y += 0.1;
+	
+	//v = sqrt(2a * delta S)
+	if(dS == 0) dS = 0.1;
+	
+	var oldY = pos.y;
+	pos.y -= sqrt(2*dS);
+	if(GetBottom() < bottomBound)  SetBottom(bottomBound);
+	
+	dS = oldY - pos.y;
+}
+function Shape::SetLeft(lt) {
+	pos.x = lt + bounds.x;
+}
+function Shape::SetRight(rt) {
+	pos.x = rt - bounds.x;
+}
+function Shape::SetBottom(bt) {
+	pos.y = bt + bounds.y;
+}
+function Shape::SetTop(tp) {
+	pos.y = tp - bounds.y;
+}
+function Shape::SetFront(bt) {
+	pos.z = bt + bounds.z;
+}
+function Shape::SetBack(tp) {
+	pos.z = tp - bounds.z;
+}
+function Shape::GetLeft() {
+	return pos.x - bounds.x;
+}
+function Shape::GetRight() {
+	return pos.x + bounds.x;
+}
+function Shape::GetBottom() {
+	return pos.y - bounds.y;
+}
+function Shape::GetTop() {
+	return pos.y + bounds.y;
+}
+function Shape::GetFront() {
+	return pos.z - bounds.z;
+}
+function Shape::GetBack() {
+	return pos.z + bounds.z;
+}
+function Shape::GetPos() {
+	return pos;
+}
+function Shape::SetPos(newPos) {
+	pos = newPos;
+}
+function Shape::DistanceToLine(x1, x2) {
+//http://mathworld.wolfram.com/Point-LineDistance3-Dimensional.html
+	return modulus((pos - x1) ^ (pos - x2)) / modulus(x2 - x1);
+}
+
+class TextureSelector
+{
+	var names;
+	var textures;
+	var fileNames;
+	var centres;
+	var rotsDir;
+	var visible;
+	var offset;
+	var selected;
+	var selectedMesh;
+	var selectedArrow;
+	var preVisible;
+	
+	var rightArrow;
+	var leftArrow;
+	
+	DrawTextures();
+	PickTexture();
+	UpdateRots();
+};
+class MeshSelector
+{
+	var meshes;
+	var names;
+	var fileNames;
+	var rotsDir;
+	var visible;
+	var offset;
+	var selected;
+	var selectedMesh;
+	var selectedArrow;
+	var preVisible;
+	
+	var rightArrow;
+	var leftArrow;
+	
+	Draw();
+	PickMesh();
+	UpdateRots();
+};
+
+function MeshSelector::MeshSelector() {
+	visible = false;
+	selectedMesh = -1;
+	selectedArrow = -1;
+	offset = 0;
+	
+	OutputLN("Shapes file exists:",FileExist("shapes.txt"));
+	if(FileExist("shapes.txt")){
+		var lines = LoadFile("shapes.txt");
+		meshes = Array(len(lines));
+		names = Array(0);
+		fileNames = Array(0);
+		OutputLN("len(lines):",len(lines));
+		foreach(var line in lines) {
+			var tokens = Split(line,",");
+			aadd(names,tokens[0]);
+			aadd(fileNames,tokens[1]);
+			OutputLN(line);
+		}
+		OutputLN("@");
+	} else {
+		meshes = Array(4);
+		names = Array(4);
+		fileNames = Array(4);
+		names[0] = "Monkey";
+		fileNames[0] = "monkey.aam";
+		names[1] = "Sphere";
+		fileNames[1] = "sphere.aam";
+		names[2] = "Cone";
+		fileNames[2] = "cone.aam";
+		names[3] = "Fountain";
+		fileNames[3] = "fountain1.aam";
+	}
+
+	rotsDir = Array(0);
+	for(var i = 0; i < len(fileNames); i++) {
+		var mesh = CVmNewMesh(fileNames[i]);
+		#ifdef CAVE
+		mesh.Normalize(0.1);
+		#else
+		mesh.Normalize(0.5);
+		#endif
+		mesh.CenterBoundingBox();
+		meshes[i] = CVmObj();
+		meshes[i].LinkToMesh(mesh);
+		aadd(rotsDir,0.1*(rand(1) < 0.5 ? -1 : 1));
+	}
+	
+	var mesh = CVmNewMesh("..\\rightArrow.aam");
+	rightArrow = CVmObj();
+	rightArrow.LinkToMesh(mesh);
+	rightArrow.SetScale([.2,.2,.2]);
+	
+	mesh = CVmNewMesh("..\\leftArrow.aam");
+	leftArrow = CVmObj();
+	leftArrow.LinkToMesh(mesh);
+	leftArrow.SetScale([.2,.2,.2]);
+}
+function TextureSelector::TextureSelector() {
+	visible = false;
+	selectedMesh = -1;
+	selectedArrow = -1;
+	offset = 0;
+	
+	
+	OutputLN("Texture file exists:",FileExist("textures.txt"));
+	if(FileExist("textures.txt")){
+		var lines = LoadFile("textures.txt");
+		textures = Array(len(lines));
+		names = Array(0);
+		fileNames = Array(0);
+		centres = Array(len(textures));
+		OutputLN("len(lines):",len(lines));
+		foreach(var line in lines) {
+			var tokens = Split(line,",");
+			aadd(names,tokens[0]);
+			aadd(fileNames,tokens[1]);
+			aadd(centres,[0,0,0]);
+			OutputLN(line);
+		}
+		OutputLN("@");
+		rotsDir = Array(0);
+		for(var i = 0; i < len(fileNames); i++) {
+			textures[i] = CVmTexture(fileNames[i]);
+			aadd(rotsDir,[Rand(1),Rand(1),Rand(1)]);
+		}
+	} 
+	
+	var mesh = CVmNewMesh("..\\rightArrow.aam");
+	rightArrow = CVmObj();
+	rightArrow.LinkToMesh(mesh);
+	rightArrow.SetScale([.2,.2,.2]);
+	
+	mesh = CVmNewMesh("..\\leftArrow.aam");
+	leftArrow = CVmObj();
+	leftArrow.LinkToMesh(mesh);
+	leftArrow.SetScale([.2,.2,.2]);
+}
+function MeshSelector::Draw() {
+	
+	#ifdef CAVE
+	var centre = CameraGetPosition() + headpos;
+	#else
+	var centre = CameraGetPosition(); // + headpos;
+	#endif
+	
+	centre += VectorRotate(headrot.y,0,1,0,[0,0,-3],false);
+	var lX = VectorRotate(headrot.y,0,1,0,[1,0,0],true);
+	
+	rightArrow.SetPosition(centre + 1.35 * lX);
+	leftArrow.SetPosition(centre - 1.35 * lX);
+	
+	var d = 3;
+	var start = centre;
+	var xinc = 0.6;
+	#ifdef CAVE
+	start += [0,.3,0] - .9 * lX;
+	#else
+	start += [0,.75,0] - .75 * lX;
+	xinc = 0.5;
+	#endif
+	var i = offset;
+	var pos = start;
+	
+	if(selectedMesh > -1) meshes[selectedMesh].DrawBoundingBox();
+	for(var y = 1; y < 5; y++) {
+		for(var x = 0; x < 4; x++) {
+			meshes[i].SetPosition(pos);
+			meshes[i].draw();
+			//Text Drawing
+			//var text = CVmText(names[i]);
+			//text.SetPosition(pos.x,pos.y-.4,pos.z);
+			//
+			if(++i >= len(meshes)) break;
+			pos += xinc * lX;
+		}
+		if(i >= len(meshes)) break;
+		pos = start;
+		pos.y -= .5 * y;
+	}
+	if(len(meshes) > 16) {
+		rightArrow.draw();	
+		leftArrow.draw();	
+	}
+}
+function TextureSelector::DrawTextures() {
+	#ifdef CAVE
+	var centre = CameraGetPosition() + headpos;
+	#else
+	var centre = CameraGetPosition(); // + headpos;
+	#endif
+	
+	centre += VectorRotate(headrot.y,0,1,0,[0,0,-3],false);
+	var lX = VectorRotate(headrot.y,0,1,0,[1,0,0],true);
+	
+	rightArrow.SetPosition(centre + 1.35 * lX);
+	leftArrow.SetPosition(centre - 1.35 * lX);
+	
+	var d = 3;
+	var start = centre;
+	var xinc = 0.6;
+	#ifdef CAVE
+	start += [0,.3,0] - .9 * lX;
+	#else
+	start += [0,.75,0] - .75 * lX;
+	xinc = 0.5;
+	#endif
+	var i = offset;
+	var pos = start;
+	var hs = 0.2 * lX;
+	
+	var vs = 0.2;
+	
+	for(var y = 1; y < 5; y++) {
+		for(var x = 0; x < 4; x++) {
+			glPushMatrix();
+			glTranslate(pos);
+			centres[i] = pos;
+			glEnable(GL_LIGHTING);
+			
+			SetActiveTexture(textures[i]);
+			glTexEnvf( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE );
+			// when texture area is small, bilinear filter the closest mipmap
+			glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+		                 GL_LINEAR_MIPMAP_NEAREST );
+			// when texture area is large, bilinear filter the original
+			glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+		
+			// the texture wraps over at the edges (repeat)
+			glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT );
+			glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT );	
+			
+			glColor(1,0,0);
+			glBegin(GL_QUADS);
+			glTexCoord(0,0); glVertex(-hs - [0,vs,0]);
+			glTexCoord(0,1); glVertex(hs - [0,vs,0]);
+			glTexCoord(1,1); glVertex(hs + [0,vs,0]);
+			glTexCoord(1,0); glVertex(-hs + [0,vs,0]);
+			glEnd();
+			
+			if(i == selectedMesh) {
+				glColor(0,.45,1);
+				glBegin(GL_LINE_LOOP);
+					glVertex(-hs - [0,vs,0]);
+					glVertex(hs - [0,vs,0]);
+					glVertex(hs + [0,vs,0]);
+					glVertex(-hs + [0,vs,0]);
+				glEnd();	
+			}
+			glPopMatrix();
+			if(++i >= len(textures)) break;
+			pos += xinc * lX;
+		}
+		if(i >= len(textures)) break;
+		pos = start;
+		pos.y -= .5 * y;
+	}
+	if(len(textures) > 16) {
+		rightArrow.draw();	
+		leftArrow.draw();	
+	}
+}
+function MeshSelector::UpdateRots() {
+	for(var i=0; i < len(meshes); i++) meshes[i].RotateABS(rotsDir[i],0,1,0);
+}
+function TextureSelector::UpdateRots() {
+	//for(var i=0; i < len(meshes); i++) meshes[i].RotateABS(rotsDir[i],0,1,0);
+}
+function MeshSelector::PickMesh() {
+	var camStartVert = CameraGetPosition() + wandpos;
+	var camEndVert = [0,0,-100];
+	var d = 100;
+	static var preSelectedArrow;
+	
+	camEndVert = VectorRotate(wandRot.x,1,0,0,camEndVert,false);
+	camEndVert = VectorRotate(wandRot.y,0,1,0,camEndVert,false);
+	
+	selectedMesh = -1;
+	//LineGL(camStartVert,camEndVert);
+	for(var i = offset; i < len(meshes) && i < offset + 16; i++) {
+		//http://mathworld.wolfram.com/Point-LineDistance3-Dimensional.html
+		var posD = modulus((meshes[i].GetPosition() - camStartVert) ^ (meshes[i].GetPosition() - camEndVert)) / modulus(camEndVert - camStartVert);
+		if(posD < d) { // && i < offset && i < offset + 16) {
+			d = posD;
+			selectedMesh = i; 
+			selected = fileNames[selectedMesh];
+		}
+	}
+	preSelectedArrow = selectedArrow;
+	selectedArrow = -1;
+	
+	var ltArrowD = modulus((leftArrow.GetPosition() - camStartVert) ^ (leftArrow.GetPosition() - camEndVert)) / modulus(camEndVert - camStartVert);
+	var rtArrowD = modulus((rightArrow.GetPosition() - camStartVert) ^ (rightArrow.GetPosition() - camEndVert)) / modulus(camEndVert - camStartVert);
+	if(len(meshes) > 16 && ltArrowD < d) { selectedMesh = -1; selectedArrow = 0; d = ltArrowD; }
+	else if(len(meshes) > 16 && rtArrowD < d && rtArrowD < 0.3) { selectedMesh = -1; selectedArrow = 1; d = rtArrowD; }
+	
+	if(selectedArrow != preSelectedArrow && selectedArrow > -1) {
+		if(selectedArrow == 0) { outputLN("going left..."); offset -= 16; }
+	 	else { outputLN("going right..."); offset += 16; }
+	}
+	
+	offset = offset % len(meshes);
+	if(offset < 0) offset = len(meshes) + offset;
+}	
+function TextureSelector::PickTexture() {
+	var camStartVert = CameraGetPosition() + wandpos;
+	var camEndVert = [0,0,-100];
+	var d = 100;
+	static var preSelectedArrow;
+	
+	camEndVert = VectorRotate(wandRot.x,1,0,0,camEndVert,false);
+	camEndVert = VectorRotate(wandRot.y,0,1,0,camEndVert,false);
+	
+	selectedMesh = -1;
+	//LineGL(camStartVert,camEndVert);
+	for(var i = offset; i < len(textures) && i < offset + 16; i++) {
+		//http://mathworld.wolfram.com/Point-LineDistance3-Dimensional.html
+		var posD = modulus((centres[i] - camStartVert) ^ (centres[i] - camEndVert)) / modulus(camEndVert - camStartVert);
+		if(posD < d) { // && i < offset && i < offset + 16) {
+			d = posD;
+			selectedMesh = i; 
+			selected = fileNames[selectedMesh];
+		}
+	}
+	preSelectedArrow = selectedArrow;
+	selectedArrow = -1;
+	
+	var ltArrowD = modulus((leftArrow.GetPosition() - camStartVert) ^ (leftArrow.GetPosition() - camEndVert)) / modulus(camEndVert - camStartVert);
+	var rtArrowD = modulus((rightArrow.GetPosition() - camStartVert) ^ (rightArrow.GetPosition() - camEndVert)) / modulus(camEndVert - camStartVert);
+	if(len(textures) > 16 && ltArrowD < d) { selectedMesh = -1; selectedArrow = 0; d = ltArrowD; }
+	else if(len(textures) > 16 && rtArrowD < d && rtArrowD < 0.3) { selectedMesh = -1; selectedArrow = 1; d = rtArrowD; }
+	
+	if(selectedArrow != preSelectedArrow && selectedArrow > -1) {
+		if(selectedArrow == 0) { outputLN("going left..."); offset -= 16; }
+	 	else { outputLN("going right..."); offset += 16; }
+	}
+	
+	offset = offset % len(textures);
+	if(offset < 0) offset = len(textures) + offset;
+}
+function OnDownload()
+{
+	// TODO: download your resources here
+}
+
+
+
+function OnInit(params)
+{
+	setLocalDir();
+	SceneSetParam(VR_HEADTRACKER,1);
+	/* initialize camera */
+	CameraSetPosition(CamPos);
+		
+		
+	/* background music */
+	var music = CVmMMMp3();
+	music.Load("bgm.mp3",true);
+	//music.Play(true);
+
+	shapes = Array(2);
+	
+	glEnable(GL_NORMALIZE);
+	
+	shapes[0] = Shape();
+	shapes[0].pos = [0,1,2.5];
+	shapes[1] = Shape();
+	shapes[1].pos = [0,1,0];
+	
+	//smallShape = Shape();
+	smallShape = MeshShape();
+	smallShape.SetMesh("pointer.aam", false);
+	smallShape.pos = startVert = [0,1,0];
+	smallShape.CalcBounds([0.04,0.04,0.04]);
+	
+	var mesh = CVmNewMesh("skyDome.aam");
+	skyDome = CVmObj();
+	skyDome.LinkToMesh(mesh);
+	skyDome.SetScale([100,100,100]);
+	skyDome.SetPosition(camPos.x0z);
+	
+	/* initialize light */
+	skyLights = Array(6);
+	for(var i = 0; i < 6; i++) {
+		skyLights[i] = CVmLight();
+		skyLights[i].SetDiffuse(.5, .5, .5);
+		skyLights[i].Enable();
+	}
+	PositionLights(camPos.x0z);
+	groundTexture = CVmTexture("ground.jpg");
+	
+	
+	Light1 = CVmLight();
+	//Light1.SetPosition(PosL);
+	Light1.SetAmbient(1, 1, 1);
+	Light1.Enable();	
+
+	//Light2 = CVmLight();
+	//Light2.SetPosition([0,10,-2]);
+	//Light2.SetDiffuse(1, 0, 0);
+	//Light2.Enable();
+	
+	for (var i = 0; i < 16; i++) kb[i] = b[i] = 0;
+	
+	//#ifndef CAVE
+	SetLocalDir("\\shapes\\");
+	//#endif
+	mSelect = MeshSelector();
+	SetLocalDir("\\textures\\");
+	tSelect = TextureSelector();
+	//#ifndef CAVE
+	SetLocalDir();
+	//#endif
+	
+	var iconMesh = CVmNewMesh("icons\\translate.aam");
+	iconMesh.Normalize(0.05);
+	iconObj  = CVmObj();
+    iconObj.LinkToMesh(iconMesh);
+    TumpleIcon();
+	//iconObj
+}
+
+function PositionLights(centre)
+{
+	for(var i = 0; i < 6; i++)
+		skyLights[i].SetPosition(centre.x + 80 * sin(i*1.047), 30, centre.z - 80 * cos(i*1.047));
+}
+function DrawGroundPlane(centre)
+{
+	glPushMatrix();
+	glColor(GL_RED);
+	
+	SetActiveTexture(groundTexture);
+	glTexEnvf( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE );
+	// when texture area is small, bilinear filter the closest mipmap
+	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                 GL_LINEAR_MIPMAP_NEAREST );
+	// when texture area is large, bilinear filter the original
+	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+
+	// the texture wraps over at the edges (repeat)
+	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT );
+	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT );
+	
+	glTranslate(centre);
+	glBegin(GL_QUADS);
+	glTexCoord(200.0+centre.x,centre.z); glVertex(100,0,-100);
+	glTexCoord(centre.x,centre.z); glVertex(-100,0,-100);
+	glTexCoord(centre.x,200.0+centre.z); glVertex(-100,0,100);
+	glTexCoord(200.0+centre.x,200.0+centre.z); glVertex(100,0,100);
+	glEnd();
+	glTranslate(-centre);
+	
+	//glColor(1,1,1);
+	glPopMatrix();
+	
+}
+function OnFrame()
+{
+ 	joystickMove();
+	
+	/* manage camera */
+	
+	SceneBegin();
+	SetClearColor(0,0,0);
+	//SceneEnableFog(1,100,[0,0,0]);
+	glEnable(GL_NORMALIZE);
+		
+	var CameraPos = CameraGetPosition() + headpos;
+	
+	#ifdef LOWPOLYWORLD
+	glPushMatrix();
+	DrawGrid([1, 1, 1], 10);
+	glPopMatrix();
+	#endif
+	
+	glTranslate(CameraPos);
+	glRotate(worldRotation,0,1,0);
+	glTranslate(-CameraPos);
+	
+	DrawLine(true);
+	if(b[5] == 0) PickShape();
+	if(TranslateConstrain > 0) DrawConstrainLine(); 
+	
+	for (var i = 0; i < len(shapes); i++) {
+		if(curShape == i)
+			shapes[i].DrawSelected();
+		shapes[i].DrawShape();
+	}
+	
+	glTranslate(CameraPos);
+	glRotate(-worldRotation,0,1,0);
+	glTranslate(-CameraPos);
+	
+	if (mSelect.visible) {
+		mSelect.Draw();
+		mSelect.PickMesh();
+		mSelect.UpdateRots();
+	} else if (tSelect.visible) {
+		tSelect.DrawTextures();
+		tSelect.PickTexture();
+		tSelect.UpdateRots();
+	}
+	
+	smallShape.DrawShape();
+	iconObj.SetPosition(smallShape.pos + [0.04 * sin(iconRads),0.05,0.04 * cos(iconRads)]);
+	iconObj.Draw();
+	
+	PositionLights(CameraPos.x0z);
+	skyDome.SetPosition(CameraPos.x0z);
+	
+	#ifndef LOWPOLYWORLD
+	skyDome.Draw();
+	DrawGroundPlane(CameraPos.x0z);
+	#endif
+	
+	SceneEnd();
+}
+function DrawConstrainLine()
+{
+	if(curShape < 0 || TranslateConstrain == 0) return;
+	var startVert = shapes[curShape].pos.xyz;
+	var endVert = shapes[curShape].pos.xyz;
+
+	startVert[TranslateConstrain - 1] = -100;
+	endVert[TranslateConstrain - 1] = 100;
+
+	glPushAttrib(GL_LIGHTING_BIT | GL_LINE_BIT | GL_CURRENT_BIT);
+	
+	glColor(1,1,1);
+	glLineWidth(1);
+	glDisable(GL_LIGHTING);
+	
+	glEnable (GL_LINE_STIPPLE);
+	glLineStipple (1, 0x00FF);
+	glBegin(GL_LINES);
+		glVertex(startVert);
+		glVertex(endVert);
+	glEnd();
+	glDisable (GL_LINE_STIPPLE);
+}
+function DrawLine(visible) 
+{
+	var vec = Vector(3);
+	vec.z = -100;
+	vec = VectorRotate(wandRot.x,1,0,0,vec,false);
+	vec = VectorRotate(wandRot.y - worldRotation,0,1,0,vec,false);
+	//vec = VectorRotate(wandRot.z,0,0,1,vec,false);
+	
+	endVert = startVert + vec;
+	
+	if(!visible) return;
+	glPushAttrib(GL_LIGHTING_BIT | GL_LINE_BIT | GL_CURRENT_BIT);
+	
+	glColor(1,1,1);
+	glLineWidth(1);
+	glDisable(GL_LIGHTING);
+	
+	glEnable (GL_LINE_STIPPLE);
+	glLineStipple (1, 0x00FF);
+	glBegin(GL_LINES);
+		glVertex(startVert);
+		glVertex(endVert);
+	glEnd();
+	glDisable (GL_LINE_STIPPLE);
+}
+function LineGL(a,b) {
+	OutputLN("drawing line...");
+	glBegin(GL_LINES);
+		glVertex(a);
+		glVertex(b);
+	glEnd();
+}
+function PickShape(){
+	curShape = -1;
+	var closest = 1000;
+	for (var i = 0; i < len(shapes); i++) {
+		var dis = shapes[i].DistanceToLine(startVert, endVert);
+		if(dis < closest) {
+			curShape = i;
+			closest = dis;
+		}
+		#ifdef DEBUG
+		ConsoleText(0.1,0.03*i,Sprintf("distance: %.2f - %i", shapes[i].DistanceToLine(smallShape.pos, endVert), curShape));
+		#endif
+	}
+}
+
+function DownloadReady(RequestID)
+{
+	// TODO
+}
+
+
+
+function OnTimer()
+{
+	static var waitCount = 10;
+	getNewKeyboardEvents();
+	//joystickMove();
+	foreach (var shape in shapes) shape.Gravity();
+	iconRads += 0.01;
+	if(waitCount-- == 0) {
+		skyDome.RotateABS(0.005,0,1,0);
+		waitCount = 10;
+	}
+	iconObj.Rotate(0.3,iconTumpleAxis);
+}
+
+function OnExit()
+{
+	// TODO: put your cleanup code here
+}
+
+function joystickMove()
+{
+	var MV_SENSITIVITY  = 0.2;
+	var ROT_SENSITIVITY = 5;
+	var DEADZONE  = 0.1;
+	
+	var buts = GetTrackerButtons(1);
+	
+	#ifndef CAVE
+	var j = CVmJoystick();
+	if (j.enabled) {
+	buts = j.Buttons;
+	#endif
+	for (var i=0;i<=15;i+=1)
+	{
+		if(1==(buts%2) || kb[i]==1) b[i] = 1;
+		else b[i] = 0;
+		buts/=2;
+		//b[i] = 0;
+	}
+	#ifndef CAVE
+	}
+	#endif
+	
+	#ifdef CAVE
+	headpos = GetTrackerPos(0);
+	headrot = GetTrackerRot(0);
+	wandpos = GetTrackerPos(1);
+	wandrot = GetTrackerRot(1);
+	buts = GetTrackerButtons(1);
+	#else
+	buts = j.Buttons;
+	static var preY = 0;
+	static var preX = 0;
+	headpos = [1.1,1.8,2];
+	var headrot = [0,0,0];
+	var wandpos = [0.4,-0.1,-1.0];
+	if (j.enabled) {
+		if (j.u < 0.5 - DEADZONE || j.u > 0.5 + DEADZONE) wandrot.y -= (j.u - 0.5) * 5;
+		if (j.r < 0.5 - DEADZONE || j.r > 0.5 + DEADZONE) wandrot.x += (j.r - 0.5) * 5;
+	}
+	#endif
+	var joystick = GetTrackerJoy(1);
+	
+	var CameraMatrix = CameraGetMatrix();
+	var CameraPos = CameraGetPosition();
+	
+	#ifdef DEBUG
+	ConsoleColor(1,1,1,1);
+	ConsoleText(0.1,0.15,Sprintf("head pos: %.2f, %.2f, %.2f", headpos.x, headpos.y, headpos.z));
+	ConsoleText(0.1,0.18,Sprintf("head rot: %.2f, %.2f, %.2f", headrot.x, headrot.y, headrot.z));
+	ConsoleText(0.1,0.21,Sprintf("wand pos: %.2f, %.2f, %.2f : %i", wandpos.x, wandpos.y, wandpos.z, worldRotation));;
+	ConsoleText(0.1,0.24,Sprintf("wand rot: %.2f, %.2f, %.2f", wandrot.x, wandrot.y, wandrot.z));
+	ConsoleText(0.1,0.27,Sprintf("wand valuator: %.2f, %.2f", joystick.x, joystick.y));
+	ConsoleText(0.1,0.30,Sprintf("buttons: %i, red: %i, yellow: %i, green: %i, blue: %i, joy butt: %i, trigger: %i", buts, b[0], b[1], b[2], b[3], b[4], b[5]));
+	#endif
+	
+	var oldJoyMode = joyMode;
+	if (b[0]==1 && lastButtons%2==0 && b[5] == 0) 
+		joyMode = (joyMode == LOOK ? MOVE : LOOK);
+	
+	var oldMode = opMode;
+	if (b[1]==1 && lastButtons/2%2==0 && b[5] == 0)
+		opMode = (opMode + 1) % NUM_MODES;
+	
+	//if icon changed load new icon
+	if(oldMode != opMode) LoadIcon();
+	if(oldJoyMode != joyMode) LoadPointer();
+	
+	if (b[2]==1 && lastButtons/4%2==0 && b[5] == 0) {
+		aadd(shapes, Shape());
+		curShape = len(shapes) - 1;
+	}
+	
+	//object just released?
+	if (curShape>-1 && b[5]==0 && lastButtons/32%2==1) shapes[curShape].pauseCount = 20;
+		
+	ConsoleText(0,0.90,Sprintf("%s | %s", joyMode == LOOK ? "look" : "move", opMode == TRANSLATE_MODE ? "translate" : (opMode == SCALE_MODE ? "scale" : "object")));	
+	
+	
+	//camera translation
+	#ifdef CAVE
+	var adjU = (joystick.x + 1) / 2;
+	var adjR = (joystick.y + 1) / 2;
+	#else
+	var adjU = 0.5;
+	var adjR = 0.5;
+	if(j.enabled) {
+		adjU = j.x;
+		adjR = 1 - j.y;
+	}
+	#endif
+	var dX = (adjU - 0.5 < -DEADZONE || adjU - 0.5 > DEADZONE) ? adjU - 0.5 : 0;
+	var dY = (adjR - 0.5 < -DEADZONE || adjR - 0.5 > DEADZONE) ? adjR - 0.5 : 0;
+	
+	
+
+	if(joyMode == LOOK && b[5] == 0) {
+		//camera rotation
+		worldRotation += dX*ROT_SENSITIVITY;
+		worldRotation = worldRotation % 360;
+	} else if(b[5] == 0) {
+		CameraPos += VectorRotate(wandrot.y-worldRotation,0,1,0,CameraGetXAxis(),true) * dX * MV_SENSITIVITY 
+					+ VectorRotate(wandrot.y-worldRotation,0,1,0,CameraGetZAxis(),true) * -dY * MV_SENSITIVITY;
+		CameraPos.y = 1.1;
+		CameraSetPosition(CameraPos);
+	}
+	
+	startVert = CameraPos + headpos + VectorRotate(-worldRotation, 0, 1, 0, wandpos - headpos, false);
+	smallShape.pos = CameraPos + wandpos; //headpos + VectorRotate(-worldRotation, 0, 1, 0, wandpos - headpos, false) + [0,0.1,0];
+	smallShape.rot = wandrot;
+	//smallShape.rot.y -= worldRotation;
+	//smallShape.rot.x -= worldRotation;
+	
+	static var PrecSphereX = 0, PrecSphereY = 0;
+	var TR_SENSITIVITY = 0.01;
+	mSelect.preVisible = mSelect.visible;
+	mSelect.visible = false;
+	
+	tSelect.preVisible = tSelect.visible;
+	tSelect.visible = false;
+	if(b[5]==1 && curShape > -1 && opMode < NUM_MODES) {
+		var dX = WandRot.x - PrecSphereX;
+		var dY = WandRot.y - PrecSphereY;			
+		//outputLN(sprintf("%.2f, %.2f",dX,dY));
+		if(opMode == TRANSLATE_MODE) {
+			//OutputLn(Sprintf("WandRot.x: %i",WandRot.x));
+			if (b[0]==1 && lastButtons%2==0) TranslateConstrain = ++TranslateConstrain % 4;
+			
+			var dVec1;
+			var dVec2 = shapes[curShape].pos - (CameraPos + wandpos); //vector from user head to shape
+			
+			//Rotate around local axis
+			var ourX = VectorRotate(headrot.y-worldRotation, 0,1,0, [1,0,0], true);
+			var ourY = VectorRotate(headrot.y-worldRotation, 0,1,0, [0,1,0], true);
+			
+			dVec1 = VectorRotate (dY, ourY, dVec2, false);
+			dVec1 = VectorRotate (dX, ourX, dVec1, false);
+			
+			//if translation is constrained, translate only along relavent axis
+			if(TranslateConstrain > 0) 
+				dVec2[TranslateConstrain - 1] = dVec1[TranslateConstrain - 1];
+			else
+				dVec2 = dVec1;
+			
+			shapes[curShape].pos = (CameraPos + wandpos) + dVec2;
+		} else if (opMode == SCALE_MODE) {		
+			shapes[curShape].bounds *= dX / 10 + 1;
+
+			shapes[curShape].FloorBounds();
+			shapes[curShape].SetShape();
+		} else if (opMode == ROTATE_MODE) {
+			shapes[curShape].rot.y += dY;
+		} else if (b[5]==1 && opMode == OBJECT_MODE && curShape > -1) {
+			//OutputLN("mesh Select");
+			mSelect.visible = true;
+		} else if (b[5]==1 && opMode == TEXTURE_MODE && curShape > -1) {
+			//OutputLN("mesh Select");
+			tSelect.visible = true;
+		} else if (curShape >-1 && opMode == DELETE_MODE) {
+			if (b[5]==1 && lastButtons/32%2==0) {
+				OutputLN("Deleting ",curShape);
+				adel(shapes,curShape);
+				curShape=-1;
+			}
+		}
+		if(curShape > -1) shapes[curShape].CheckBounds();
+	}
+	PrecSphereX = wandRot.x;
+	PrecSphereY = wandRot.y;
+	
+	if(opMode == OBJECT_MODE && curShape > -1) {
+		if (mSelect.preVisible && !mSelect.Visible && mSelect.selectedMesh > -1) {
+			OutputLN(mSelect.selected);
+			SetLocalDir("\\shapes\\");
+			var pos = shapes[curShape].pos;
+			shapes[curShape] = MeshShape(shapes[curShape]);
+			shapes[curShape].bounds = shapes[curShape].SetMesh(mSelect.selected, true);
+			//shapes[curShape].bounds = [shapes[curShape].bounds.x*4, shapes[curShape].bounds.y * .5, shapes[curShape].bounds.z*4];
+			shapes[curShape].pos = pos;
+		}
+	} else if (opMode == TEXTURE_MODE && curShape > -1) {
+		if (tSelect.preVisible && !tSelect.Visible && tSelect.selectedMesh > -1) {
+			OutputLN(tSelect.selected);
+			SetLocalDir("\\textures\\");
+			shapes[curShape].texture = CVmTexture(tSelect.selected);
+		}
+	}
+	lastButtons = buts;
+	if(b[5] == 0) TranslateConstrain = 0;
+}
+
+function LoadIcon() {
+	SetLocalDir();
+	var iconMesh;
+	switch(opMode) {
+		case TRANSLATE_MODE:
+			iconMesh = CVmNewMesh("icons\\translate.aam");
+			break;
+		case ROTATE_MODE:
+			iconMesh = CVmNewMesh("icons\\rotate.aam");
+			break;
+		case OBJECT_MODE:
+			iconMesh = CVmNewMesh("icons\\object.aam");
+			break;
+		case SCALE_MODE:
+			iconMesh = CVmNewMesh("icons\\scale.aam");
+			break;
+		case DELETE_MODE:
+			iconMesh = CVmNewMesh("icons\\delete.aam");
+			break;
+		case TEXTURE_MODE:
+			iconMesh = CVmNewMesh("icons\\texture.aam");
+			break;
+	}
+	iconMesh.Normalize(0.05);
+    iconObj.LinkToMesh(iconMesh);
+    TumpleIcon();
+}
+function LoadPointer() {
+	SetLocalDir();
+	if(joyMode == LOOK)
+		smallShape.SetMesh("pointerLook.aam", false);
+	else
+		smallShape.SetMesh("pointer.aam", false);
+}
+function TumpleIcon() {
+	iconTumpleAxis = [Rand(1),Rand(1),Rand(1)];
+}
+function getNewKeyboardEvents()
+{
+	return;
+	var key = keyboard();
+	var inputScale = 1;
+	var scale = [1,1,1];
+	
+	if(key == "z") scale = [0.9,0.9,0.9];
+	else if(key == "x") scale = [1.1,1.1,1.1];
+	
+	var CameraPos = CameraGetPosition();
+	#ifdef SHAPEDEBUG
+	if(key == "w") shapes[curShape].pos.y += 0.1;
+	else if(key == "s") shapes[curShape].pos.y -= 0.1;
+	
+	if(key == "d") shapes[curShape].pos.x += 0.1;
+	else if(key == "a") shapes[curShape].pos.x -= 0.1;
+	#else
+	if(key == "w") CameraPos -= VectorRotate(wandrot.y-worldRotation,0,1,0,CameraGetZAxis(),true) * 0.1;
+	else if(key == "s") CameraPos += VectorRotate(wandrot.y-worldRotation,0,1,0,CameraGetZAxis(),true) * 0.1;
+		
+	if(key == "d") CameraPos += VectorRotate(wandrot.y-worldRotation,0,1,0,CameraGetXAxis(),true) * 0.1;
+	else if(key == "a") CameraPos -= VectorRotate(wandrot.y-worldRotation,0,1,0,CameraGetXAxis(),true) * 0.1;
+	#endif
+	
+	CameraSetPosition(CameraPos);
+	
+	if(key == "r") shapes[curShape].pos.z -= 0.1;
+	else if(key == "f") shapes[curShape].pos.z += 0.1;
+	
+	if(key == "t") wandRot.y -= 10;
+	else if(key == "y") wandRot.y += 10;
+	
+	if(key == "g") wandRot.x -= 10;
+	else if(key == "h") wandRot.x += 10;
+	
+	if(key == "u") wandRot.z -= 10;
+	else if(key == "i") wandRot.z += 10;
+	
+	if(key == "0") kb[0] = (kb[0] == 0 ? 1 : 0);
+	if(key == "1") kb[1] = (kb[1] == 0 ? 1 : 0);
+	if(key == "2") kb[2] = (kb[2] == 0 ? 1 : 0);
+	if(key == "3") kb[3] = (kb[3] == 0 ? 1 : 0);
+	if(key == "4") kb[4] = (kb[4] == 0 ? 1 : 0);
+	if(key == "5") kb[5] = (kb[5] == 0 ? 1 : 0);
+	
+	if (key == "<") worldRotation -= 5;
+	else if (key == ">") worldRotation += 5;
+	
+	//ConsoleText(0.05, 0.15, Sprintf("bounds: %.2f %.2f %.2f",shapes[curShape].bounds.x,shapes[curShape].bounds.y,shapes[curShape].bounds.z));
+	//ConsoleText(0.05, 0.12, Sprintf("position: %.2f %.2f %.2f",shapes[curShape].pos.x,shapes[curShape].pos.y,shapes[curShape].pos.z));
+	//ConsoleText(0.05, 0.09, Sprintf("bot, top: %.2f %.2f",shapes[curShape].corners[0].y,shapes[curShape].corners[2].y));
+	
+	if(key == "n")  {
+		aadd(shapes, Shape());
+		curShape = len(shapes) - 1;
+	}
+	if(key == "m")  {
+		curShape++;
+		curShape %= len(shapes);
+	}
+	if(key == "b")
+		shapes[curShape].ResetShape();
+}
+
+function DrawGrid(col, size)
+{
+	/* let's not mess up current OpenGL status */
+	glPushAttrib(GL_LIGHTING_BIT | GL_LINE_BIT | GL_CURRENT_BIT);
+	
+	glLineWidth(1);
+	glDisable(GL_LIGHTING);
+	glColor(col);
+	var max = size / 2.0;
+	var min = -max;	
+	var step = size / 10.0;
+	
+	glBegin(GL_LINES);
+		for (var i = min; i <= max; i += step)
+		{
+			glVertex(i, 0, max);
+			glVertex(i, 0, min);
+			
+			glVertex(max, 0, i);
+			glVertex(min, 0, i);
+		}
+	glEnd();
+	
+	/* polite restoration of previous OpenGL status */
+	glPopAttrib();
+}
