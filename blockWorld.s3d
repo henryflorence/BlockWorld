@@ -57,6 +57,7 @@ var TranslateConstrain = 0;
 var iconRads = 0;
 var iconObj;
 var iconTumpleAxis;
+var impact = 2;
 
 /* Light globals */
 var skyLights;
@@ -92,6 +93,7 @@ class Shape
 	var pauseCount;
 	var texture;
 	var bMult;
+	var impactEffect;
 	
 	ResetShape();
 	SetShape();
@@ -187,6 +189,10 @@ function Shape::Shape()
 		corners[i] = Vector(3);
 	
 	ResetShape();
+	
+	SetLocalDir();
+	impactEffect = CVmVRAWav();
+	impactEffect.Load("/sound/DropEffect.wav");
 }
 function MeshShape::MeshShape(oldShape)
 {
@@ -452,7 +458,12 @@ function Shape::Gravity()
 	
 	var oldY = pos.y;
 	pos.y -= sqrt(2*dS);
-	if(GetBottom() < bottomBound)  SetBottom(bottomBound);
+	if(GetBottom() < bottomBound){
+		if(dS > 0.1 && !impactEffect.isPlaying()) {
+			OutputLN(sprintf("impact from %i",curShape)); impactEffect.play(); impact = 0;
+		}	
+	  SetBottom(bottomBound);
+	}
 	
 	dS = oldY - pos.y;
 }
@@ -1036,6 +1047,14 @@ function OnFrame()
 	DrawGroundPlane(CameraPos.x0z);
 	#endif
 	
+	if(impact < 2) {
+		CameraPos = CameraGetPosition();
+		CameraPos.y -= sin(impact * PI * 2) * 0.1;
+		//Output("impact: ");
+		//OutputLN(-sin(impact * PI));
+		impact += 0.1;
+		CameraSetPosition(CameraPos);
+	}
 	SceneEnd();
 }
 function DrawConstrainLine()
@@ -1238,7 +1257,7 @@ function joystickMove()
 	} else if(b[5] == 0) {
 		CameraPos += VectorRotate(wandrot.y-worldRotation,0,1,0,CameraGetXAxis(),true) * dX * MV_SENSITIVITY 
 					+ VectorRotate(wandrot.y-worldRotation,0,1,0,CameraGetZAxis(),true) * -dY * MV_SENSITIVITY;
-		CameraPos.y = 1.1;
+		if(impact == 2) CameraPos.y = 1.1;
 		CameraSetPosition(CameraPos);
 	}
 	
@@ -1329,6 +1348,11 @@ function joystickMove()
 function LoadIcon() {
 	SetLocalDir();
 	var iconMesh;
+	var soundEffect = CVmVRAWav();
+	soundEffect.Load("/sound/Select.wav");
+	soundEffect.setVolume(1.5);
+	soundEffect.Play(); 
+	
 	switch(opMode) {
 		case TRANSLATE_MODE:
 			iconMesh = CVmNewMesh("icons\\translate.aam");
