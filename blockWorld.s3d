@@ -19,7 +19,7 @@ SET SCENE_FAR  = 1000;
 #define DELETE_MODE 	5
 #define NUM_MODES 		6
 
-#define LOWPOLYWORLD
+//#define LOWPOLYWORLD
 #define DEBUG
 //#define HIGHPOLY
 // TODO: put your global variables here
@@ -27,7 +27,7 @@ SET SCENE_FAR  = 1000;
 
 /* Camera globals */
 //#ifdef CAVE
-var CamPos = [-10, 1.1, 0]; 	// camera position
+var CamPos = [0, 1.1, 10]; 	// camera position
 
 
 var shapes;
@@ -38,7 +38,7 @@ var scaling = false;
 var joyMode = MOVE;
 var opMode = TRANSLATE_MODE;
 var lastButtons = 0;
-var worldRotation = 90;
+var worldRotation = 0;
 var pointer = [0.5,0.5,0];
 var smallShape;
 var skyDome;
@@ -91,6 +91,7 @@ class Shape
 	var yStartpos;
 	var pauseCount;
 	var texture;
+	var bMult;
 	
 	ResetShape();
 	SetShape();
@@ -120,6 +121,7 @@ class Shape
 	
 	GetPos();
 	SetPos(newPos);
+	SetMult(m);
 };
 
 class MeshShape : Shape
@@ -129,12 +131,12 @@ class MeshShape : Shape
 	var obj;
 	var normVec;
 	
-	SetMesh(file, normalise, norm);
+	SetMesh(file, normalise, norm, bounds);
 	DrawShape();
 	Clone(oldShape);
 	DrawSelected();
 };
-function MeshShape::SetMesh(file, normalise, norm)
+function MeshShape::SetMesh(file, normalise, norm, boundsMult)
 {
 	mesh = CVmNewMesh(file);
 	obj = CVmObj();
@@ -147,10 +149,25 @@ function MeshShape::SetMesh(file, normalise, norm)
 	newBounds.y = (objBounds[5] - objBounds[1]) / 2;
 	newBounds.z = (ObjBounds[6] - objBounds[2]) / 2;
 	
-	OutputLN(norm);
+	Output(file);
+	Output(" : ");
+	Output(norm);
+	Output(" : ");
+	OutputLN(boundsMult);
 	mesh.Scale(norm);
 	obj.LinkToMesh(mesh);
-	return newBounds;
+	
+	Shape::this.SetMult(boundsMult);
+	
+	newBounds.x *= boundsMult.x;
+	newBounds.y *= boundsMult.y;
+	newBounds.z *= boundsMult.z;
+	
+	return newBounds; // * [1/boundsMult.x,1/boundsMult.y,1/boundsMult.z];
+}
+
+function Shape::SetMult(boundsMult) {
+	bMult = boundsMult;
 }
 function Shape::Shape()
 {
@@ -161,6 +178,7 @@ function Shape::Shape()
 	pos = [0,20,0];
 	rot = [0,0,0];
 	bounds = [1,1,1];
+	bMult = [1,1,1];
 	corners = Array(8);
 	pauseCount = 0;
 	texture = CVmTexture("ground.jpg");;
@@ -184,7 +202,9 @@ function Shape::ResetShape()
 	SetShape();
 }
 function Shape::SetShape() {
-	SetShapeFromValues(-bounds.x,bounds.x,-bounds.y,bounds.y,-bounds.z,bounds.z);
+	Output("bMult: ");
+	OutputLN(bMult);
+	SetShapeFromValues(-bounds.x*bMult.x,bounds.x*bMult.x,-bounds.y*bMult.y,bounds.y*bMult.y,-bounds.z*bMult.z,bounds.z*bMult.z);
 }
 function Shape::SetShapeFromValues(lt,rt,btm,top,fnt,bk) 
 {
@@ -212,7 +232,7 @@ function MeshShape::DrawShape()
 	obj.setRotation(rot.x, [1,0,0]);
 	obj.Rotate(rot.y, [0,1,0]);
 	obj.Rotate(rot.z, [0,0,1]);
-	obj.SetScale([bounds.x,bounds.y,bounds.z]);
+	obj.SetScale([bounds.x * 1/bMult.x,bounds.y * 1/bMult.y,bounds.z * 1/bMult.z]);
 	obj.Draw();
 }
 function MeshShape::DrawSelected() 
@@ -267,25 +287,30 @@ function Shape::DrawSelected()
 	glColor(0,.45,1);
 	glLineWidth(4);
 	glDisable(GL_LIGHTING);
+	var b = bounds;
 	
-	var xs = {-bounds.x,bounds.x,bounds.x,-bounds.x};
-	var zs = {bounds.z,bounds.z,-bounds.z,-bounds.z};
+	//b.x *= bMult.x;
+	//b.y *= bMult.y;
+	//b.z *= bMult.z;
 	
-	glTranslate(pos+[0,bounds.y,0]);
+	var xs = {-b.x,b.x,b.x,-b.x};
+	var zs = {b.z,b.z,-b.z,-b.z};
+	
+	glTranslate(pos+[0,b.y,0]);
 	glBegin(GL_LINE_LOOP);
 	for(var i = 0; i < 4; i++)
 		glVertex(xs[i],0,zs[i]);
 	glEnd();
-	glTranslate([0,-2 * bounds.y,0]);
+	glTranslate([0,-2 * b.y,0]);
 	glBegin(GL_LINE_LOOP);
 	for(var i = 0; i < 4; i++)
 		glVertex(xs[i],0,zs[i]);
 	glEnd();
-	glTranslate([0,bounds.y,0]);
+	glTranslate([0,b.y,0]);
 	glBegin(GL_LINES);
 	for(var i = 0; i < 4; i++) {
-		glVertex(xs[i],-bounds.y,zs[i]);
-		glVertex(xs[i],bounds.y,zs[i]);
+		glVertex(xs[i],-b.y,zs[i]);
+		glVertex(xs[i],b.y,zs[i]);
 	}
 	glEnd();
 	
@@ -505,6 +530,7 @@ class MeshSelector
 	var names;
 	var fileNames;
 	var norms;
+	var bounds;
 	var rotsDir;
 	var visible;
 	var offset;
@@ -534,13 +560,16 @@ function MeshSelector::MeshSelector() {
 		names = Array(0);
 		fileNames = Array(0);
 		norms = Array(0);
+		bounds = Array(0);
 		OutputLN("len(lines):",len(lines));
 		foreach(var line in lines) {
 			var tokens = Split(line,",");
 			aadd(names,tokens[0]);
 			aadd(fileNames,tokens[1]);
 			var parts = Split(tokens[2],":");
+			var parts2 = Split(tokens[3],":");
 			aadd(norms,[val(parts[0]),val(parts[1]),val(parts[2])]);
+			aadd(bounds,[val(parts2[0]),val(parts2[1]),val(parts2[2])]);
 			OutputLN(line);
 		}
 		OutputLN("@");
@@ -785,8 +814,8 @@ function MeshSelector::PickMesh() {
 	 	else { outputLN("going right..."); offset += 16; }
 	}
 	
-	offset = offset % len(meshes);
-	if(offset < 0) offset = len(meshes) + offset;
+	if(offset > len(meshes)) offset = 0;
+	else if(offset < 0) offset = len(meshes) - (len(meshes) % 16);
 }	
 function TextureSelector::PickTexture() {
 	var camStartVert = CameraGetPosition() + wandpos;
@@ -855,7 +884,7 @@ function OnInit(params)
 	
 	//smallShape = Shape();
 	smallShape = MeshShape();
-	smallShape.SetMesh("pointer.aam", false, [1,1,1]);
+	smallShape.SetMesh("pointer.aam", false, [1,1,1], [1,1,1]);
 	smallShape.pos = startVert = [0,1,0];
 	smallShape.CalcBounds([0.04,0.04,0.04]);
 	
@@ -969,9 +998,16 @@ function OnFrame()
 	if(TranslateConstrain > 0) DrawConstrainLine(); 
 	
 	for (var i = 0; i < len(shapes); i++) {
-		if(curShape == i)
-			shapes[i].DrawSelected();
-		shapes[i].DrawShape();
+		if(shapes[i].__GETNAME() == "SHAPE") {
+			if(curShape == i) shapes[i].DrawSelected();
+			shapes[i].DrawShape();
+		}
+	}
+	for (var i = 0; i < len(shapes); i++) {
+		if(shapes[i].__GETNAME() != "SHAPE") {
+			if(curShape == i) shapes[i].DrawSelected();
+			shapes[i].DrawShape();
+		}
 	}
 	
 	glTranslate(CameraPos);
@@ -1272,10 +1308,10 @@ function joystickMove()
 	if(opMode == OBJECT_MODE && curShape > -1) {
 		if (mSelect.preVisible && !mSelect.Visible && mSelect.selectedMesh > -1) {
 			OutputLN(mSelect.selected);
-			SetLocalDir("\\shapes\\");
 			var pos = shapes[curShape].pos;
 			shapes[curShape] = MeshShape(shapes[curShape]);
-			shapes[curShape].bounds = shapes[curShape].SetMesh(mSelect.selected, true, mSelect.norms(mSelect.selectedMesh));
+			SetLocalDir("\\shapes\\");
+			shapes[curShape].bounds = shapes[curShape].SetMesh(mSelect.selected, true, mSelect.norms[mSelect.selectedMesh], mSelect.bounds[mSelect.selectedMesh]);
 			//shapes[curShape].bounds = [shapes[curShape].bounds.x*4, shapes[curShape].bounds.y * .5, shapes[curShape].bounds.z*4];
 			shapes[curShape].pos = pos;
 		}
@@ -1320,9 +1356,9 @@ function LoadIcon() {
 function LoadPointer() {
 	SetLocalDir();
 	if(joyMode == LOOK)
-		smallShape.SetMesh("pointerLook.aam", false);
+		smallShape.SetMesh("pointerLook.aam", false,[1,1,1],[1,1,1]);
 	else
-		smallShape.SetMesh("pointer.aam", false);
+		smallShape.SetMesh("pointer.aam", false,[1,1,1],[1,1,1]);
 }
 function TumpleIcon() {
 	iconTumpleAxis = [Rand(1),Rand(1),Rand(1)];
