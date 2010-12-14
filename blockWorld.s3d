@@ -127,27 +127,28 @@ class MeshShape : Shape
 	var mesh;
 	var tex;
 	var obj;
+	var normVec;
 	
-	SetMesh(file, normalise);
+	SetMesh(file, normalise, norm);
 	DrawShape();
 	Clone(oldShape);
 	DrawSelected();
 };
-function MeshShape::SetMesh(file, normalise)
+function MeshShape::SetMesh(file, normalise, norm)
 {
 	mesh = CVmNewMesh(file);
 	obj = CVmObj();
+	
 	if(normalise) mesh.Normalize(2);
 	mesh.CenterBoundingBox();
 	var ObjBounds = mesh.GetBoundingBox();
 	var newBounds = Vector(3);
-	var objBounds1 = obj.LocalToWorld(ObjBounds.xyz);
-	var objBounds2 = obj.LocalToWorld([ObjBounds[3],ObjBounds[4],ObjBounds[5]]);
-	newBounds.x = (ObjBounds2.x - ObjBounds1.x) / 2;
-	newBounds.y = (ObjBounds2.y - ObjBounds1.y) / 2;
-	newBounds.z = (ObjBounds2.z - ObjBounds1.z) / 2;
+	newBounds.x = (objBounds[4] - objBounds[0]) / 2;
+	newBounds.y = (objBounds[5] - objBounds[1]) / 2;
+	newBounds.z = (ObjBounds[6] - objBounds[2]) / 2;
 	
-	//mesh.Scale([1,2,2]);
+	OutputLN(norm);
+	mesh.Scale(norm);
 	obj.LinkToMesh(mesh);
 	return newBounds;
 }
@@ -503,6 +504,7 @@ class MeshSelector
 	var meshes;
 	var names;
 	var fileNames;
+	var norms;
 	var rotsDir;
 	var visible;
 	var offset;
@@ -531,11 +533,14 @@ function MeshSelector::MeshSelector() {
 		meshes = Array(len(lines));
 		names = Array(0);
 		fileNames = Array(0);
+		norms = Array(0);
 		OutputLN("len(lines):",len(lines));
 		foreach(var line in lines) {
 			var tokens = Split(line,",");
 			aadd(names,tokens[0]);
 			aadd(fileNames,tokens[1]);
+			var parts = Split(tokens[2],":");
+			aadd(norms,[val(parts[0]),val(parts[1]),val(parts[2])]);
 			OutputLN(line);
 		}
 		OutputLN("@");
@@ -850,7 +855,7 @@ function OnInit(params)
 	
 	//smallShape = Shape();
 	smallShape = MeshShape();
-	smallShape.SetMesh("pointer.aam", false);
+	smallShape.SetMesh("pointer.aam", false, [1,1,1]);
 	smallShape.pos = startVert = [0,1,0];
 	smallShape.CalcBounds([0.04,0.04,0.04]);
 	
@@ -1270,7 +1275,7 @@ function joystickMove()
 			SetLocalDir("\\shapes\\");
 			var pos = shapes[curShape].pos;
 			shapes[curShape] = MeshShape(shapes[curShape]);
-			shapes[curShape].bounds = shapes[curShape].SetMesh(mSelect.selected, true);
+			shapes[curShape].bounds = shapes[curShape].SetMesh(mSelect.selected, true, mSelect.norms(mSelect.selectedMesh));
 			//shapes[curShape].bounds = [shapes[curShape].bounds.x*4, shapes[curShape].bounds.y * .5, shapes[curShape].bounds.z*4];
 			shapes[curShape].pos = pos;
 		}
